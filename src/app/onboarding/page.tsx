@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { OnboardingWizard } from "@/app/onboarding/onboarding-wizard";
 import { AuthLayout } from "@/app/auth/auth-layout";
@@ -5,6 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Set Up Your Profile",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 const emptyProfile = {
   fullName: "",

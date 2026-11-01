@@ -11,6 +11,10 @@ import type { PlannerData } from "@/components/study-planner";
 export const metadata: Metadata = {
   title: "Your study space",
   description: "Capture lectures, review notes and plan your study week with StudyStation.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 export const dynamic = "force-dynamic";
 

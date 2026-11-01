@@ -3,7 +3,15 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 
 export const metadata: Metadata = {
   title: "Features",
-  description: "Explore StudyStation’s lecture, revision, planning, and group study tools.",
+  description: "Explore StudyStation’s lecture studio, smart AI revision notes, flashcard lab, quiz practice, and semester study planner.",
+  alternates: {
+    canonical: "/features",
+  },
+  openGraph: {
+    title: "Features · StudyStation AI Study Companion",
+    description: "Explore AI lecture capture, smart notes, flashcard decks, quiz generation, and collaborative study groups.",
+    url: "/features",
+  },
 };
 
 const sections: InfoSection[] = [

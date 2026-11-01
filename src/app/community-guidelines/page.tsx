@@ -3,7 +3,15 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 
 export const metadata: Metadata = {
   title: "Community Guidelines",
-  description: "Guidelines for respectful and safe StudyStation group collaboration.",
+  description: "Guidelines for respectful, safe, and collaborative StudyStation peer study groups.",
+  alternates: {
+    canonical: "/community-guidelines",
+  },
+  openGraph: {
+    title: "Community Guidelines · StudyStation",
+    description: "Guidelines for respectful and safe StudyStation group collaboration.",
+    url: "/community-guidelines",
+  },
 };
 
 const sections: InfoSection[] = [

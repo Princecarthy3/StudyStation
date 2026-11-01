@@ -3,7 +3,15 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "Learn how StudyStation handles account information and study materials.",
+  description: "Learn how StudyStation securely handles account information, lecture recordings, notes, and study materials.",
+  alternates: {
+    canonical: "/privacy",
+  },
+  openGraph: {
+    title: "Privacy Policy · StudyStation",
+    description: "Learn how StudyStation handles account information and study materials.",
+    url: "/privacy",
+  },
 };
 
 const sections: InfoSection[] = [

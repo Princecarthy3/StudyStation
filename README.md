@@ -211,3 +211,28 @@ After applying the Stage 4, 5, and 7 migrations, configuring Supabase, and setti
 
 `.env.example` contains placeholders only. Keep server-only credentials out of browser code. Configure only the providers required by the feature stage you are working on; Lecture Studio requires `SUPABASE_SERVICE_ROLE_KEY` for server-side lecture mutations and `OPENROUTER_API_KEY` for transcription. The AI Study Lab uses `GEMINI_API_KEY` and the service-role key for authenticated result persistence. Study Calls use the server-side `JITSI_MEET_DOMAIN` setting; do not add a provider secret to client-side variables.
 
+## Google Search & Ownership Verification
+
+StudyStation is configured out-of-the-box for Google Search crawling, rich indexing, and ownership verification in Google Search Console:
+
+1. **Google Ownership Verification**:
+   - **Method A (HTML Tag - Recommended)**: Set `GOOGLE_SITE_VERIFICATION` in your production environment variables (e.g. on Vercel). By default, it falls back to the configured token `google4df8a6879662fa0d`, which renders `<meta name="google-site-verification" content="..." />` on every page.
+   - **Method B (HTML File)**: The file [`public/google4df8a6879662fa0d.html`](./public/google4df8a6879662fa0d.html) is served at `https://your-domain.com/google4df8a6879662fa0d.html`. In Google Search Console, select **HTML file** verification and click **Verify**.
+
+2. **XML Sitemap**:
+   - Generated dynamically at `/sitemap.xml` via [`src/app/sitemap.ts`](./src/app/sitemap.ts).
+   - In Google Search Console, go to **Sitemaps** and submit `sitemap.xml`.
+
+3. **Robots Exclusion Standard (`robots.txt`)**:
+   - Generated dynamically at `/robots.txt` via [`src/app/robots.ts`](./src/app/robots.ts).
+   - Allows search crawlers to index public pages (`/`, `/features`, `/about`, `/reviews`, `/faq`, `/community-guidelines`, `/terms`, `/privacy`).
+   - Disallows indexing of private account/dashboard routes (`/app/`, `/admin/`, `/api/`, `/auth/`, `/onboarding/`).
+
+4. **Production Domain & Canonicals**:
+   - Set `APP_URL=https://your-domain.com` (or `NEXT_PUBLIC_SITE_URL`) in your production environment so canonical links, OpenGraph metadata, and sitemaps use your live URL.
+   - On Vercel, the app automatically falls back to `VERCEL_PROJECT_PRODUCTION_URL` or `VERCEL_URL` if custom URLs are not set.
+
+5. **Structured Data (Schema.org)**:
+   - Includes JSON-LD structured data on all pages for `WebSite`, `WebApplication` (`EducationalApplication`), and `Organization` to boost rich results on Google Search.
+
+

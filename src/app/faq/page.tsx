@@ -2,8 +2,16 @@ import type { Metadata } from "next";
 import { InfoPage, type InfoSection } from "@/components/info-page";
 
 export const metadata: Metadata = {
-  title: "FAQs",
-  description: "Answers to common questions about StudyStation.",
+  title: "Frequently Asked Questions (FAQ)",
+  description: "Answers to common questions about StudyStation lecture recording, AI notes, quiz generation, flashcards, and student privacy.",
+  alternates: {
+    canonical: "/faq",
+  },
+  openGraph: {
+    title: "StudyStation FAQ — Questions & Answers",
+    description: "Everything you need to know about StudyStation features, lecture transcription, quiz generation, and account security.",
+    url: "/faq",
+  },
 };
 
 const sections: InfoSection[] = [

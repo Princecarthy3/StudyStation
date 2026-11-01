@@ -7,6 +7,10 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Admin Portal — StudyStation Command Center",
   description: "Executive administrative dashboard and platform analytics for StudyStation.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default async function AdminPage() {
