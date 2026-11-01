@@ -235,4 +235,36 @@ StudyStation is configured out-of-the-box for Google Search crawling, rich index
 5. **Structured Data (Schema.org)**:
    - Includes JSON-LD structured data on all pages for `WebSite`, `WebApplication` (`EducationalApplication`), and `Organization` to boost rich results on Google Search.
 
+## Google OAuth Platform & App Verification
+
+To lift user limits and remove the *"Google hasn't verified this app"* warning screen during Google Sign-In, follow this checklist in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials/consent):
+
+### 1. OAuth Consent Screen Details
+* **App Name**: `StudyStation` (matches website branding)
+* **User Support Email**: `studystation.support@gmail.com`
+* **App Logo**: Upload the StudyStation logo from [`public/logo.png`](./public/logo.png)
+* **Application Home Page**: `https://your-domain.com` (or your live production URL)
+* **Application Privacy Policy Link**: `https://your-domain.com/privacy` (contains the required Google Limited Use disclosure and data deletion instructions)
+* **Application Terms of Service Link**: `https://your-domain.com/terms`
+* **Authorized Domains**:
+  1. Add your production domain (e.g. `your-domain.com` or `vercel.app`)
+  2. Add `supabase.co` (where Supabase OAuth redirect handlers operate)
+  *(Note: Google requires your domain to be verified in Google Search Console first, which is pre-configured via the HTML tag and file above).*
+* **Developer Contact Email**: `studystation.support@gmail.com`
+
+### 2. Scopes
+* Use standard, non-sensitive identity scopes:
+  * `openid`
+  * `.../auth/userinfo.email`
+  * `.../auth/userinfo.profile`
+* Non-sensitive scopes do not require third-party security assessments or CASA audits.
+
+### 3. Verification Checklist Satisfied by StudyStation
+* [x] **Public Domain & Search Console Ownership**: Verified via `google4df8a6879662fa0d.html` and meta tag.
+* [x] **Google Limited Use Disclosure**: Fully included in [`src/app/privacy/page.tsx`](./src/app/privacy/page.tsx) with a clickable link to Google's API Services User Data Policy.
+* [x] **Data Deletion Instructions**: Detailed instructions in the Privacy Policy (in-app deletion via `DELETE /api/account`, email support, and Google account permissions revocation).
+* [x] **Clear Consent on Sign-In**: Notice with active links to Terms and Privacy Policy placed directly under the Google sign-in button in [`src/app/auth/auth-form.tsx`](./src/app/auth/auth-form.tsx).
+* [x] **Branding Guidelines**: Official 4-color Google G SVG button with standard wording (*Continue with Google*).
+
+
 

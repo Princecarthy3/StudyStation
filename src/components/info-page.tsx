@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -45,8 +46,8 @@ export const footerLinkGroups: { title: string; links: { href: string; label: st
 
 export type InfoSection = {
   heading: string;
-  paragraphs: string[];
-  bullets?: string[];
+  paragraphs: (string | ReactNode)[];
+  bullets?: (string | ReactNode)[];
 };
 
 export function InfoPage({
@@ -123,11 +124,15 @@ export function InfoPage({
                     </div>
                     <h3 className="mt-5 text-[16px] font-extrabold tracking-[-.3px] sm:text-[18px]">{section.heading}</h3>
                     <div className="mt-2.5 space-y-3 text-[12px] leading-[1.8] text-[#716a7e] sm:text-[13px]">
-                      {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                      {section.paragraphs.map((paragraph, pIdx) => (
+                        <div key={pIdx} className="space-y-1">
+                          {paragraph}
+                        </div>
+                      ))}
                       {section.bullets && (
                         <ul className="space-y-2.5 pt-1">
-                          {section.bullets.map((bullet) => (
-                            <li key={bullet} className="flex gap-2.5">
+                          {section.bullets.map((bullet, bIdx) => (
+                            <li key={bIdx} className="flex gap-2.5">
                               <span className="mt-[9px] size-1.5 shrink-0 rounded-full bg-gradient-to-r from-[#7259e8] to-[#9b83ff]" />
                               <span>{bullet}</span>
                             </li>

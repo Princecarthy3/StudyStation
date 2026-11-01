@@ -3,7 +3,7 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "Terms and conditions for using StudyStation educational tools and services.",
+  description: "Terms and conditions for using StudyStation educational tools, authentication, and study services.",
   alternates: {
     canonical: "/terms",
   },
@@ -16,37 +16,59 @@ export const metadata: Metadata = {
 
 const sections: InfoSection[] = [
   {
-    heading: "Using StudyStation",
+    heading: "1. Agreement to terms",
     paragraphs: [
-      "By using StudyStation, you agree to use the service lawfully and to follow these terms. You are responsible for activity under your account and for keeping your sign-in details secure.",
-      "You must have the rights and permissions needed to upload, record, process, or share any material you provide. Do not use the service to violate another person’s privacy or intellectual property rights.",
+      "By creating an account, signing in with Google, or accessing StudyStation, you agree to comply with and be legally bound by these Terms of Service. If you do not agree to these terms, please discontinue using StudyStation.",
+      "You must be at least 13 years old (or the age of majority in your jurisdiction) to use StudyStation.",
     ],
   },
   {
-    heading: "Your content and sharing",
+    heading: "2. Account registration and Google authentication",
     paragraphs: [
-      "You retain responsibility for your content. You authorize StudyStation to process it as needed to provide the features you request, such as transcription, AI study generation, storage, and group sharing.",
-      "Content shared with a study group may be seen by group members. Check the audience and membership before sharing.",
+      "You may register an account using your email address or through supported third-party identity providers such as Google Sign-In.",
+      "When using Google Sign-In, you authorize StudyStation to verify your identity using the basic profile information provided by Google. You are responsible for safeguarding your credentials and for all activities that occur under your account.",
     ],
   },
   {
-    heading: "AI and educational use",
+    heading: "3. User content and ownership",
     paragraphs: [
-      "AI-generated notes, explanations, transcripts, and practice materials may contain errors, omissions, or bias. They are study aids, not authoritative academic, professional, or institutional advice. Verify important information against course materials and qualified sources.",
-      "StudyStation does not guarantee grades, academic outcomes, uninterrupted availability, or the accuracy of generated content.",
+      "You retain full intellectual property ownership of the lecture audio, video, notes, and study materials you upload or generate on StudyStation.",
+      "You grant StudyStation a limited, non-exclusive license solely to host, process, transcribe, and format your content as necessary to provide study tools to you and any collaborative groups you explicitly join.",
+      "You must possess all necessary rights and academic permissions to upload, record, or transcribe any educational materials. Do not upload materials that violate copyright, confidentiality, or privacy laws.",
     ],
   },
   {
-    heading: "Third-party services",
+    heading: "4. AI tools and academic integrity",
     paragraphs: [
-      "Some features rely on third-party services, including AI processing and Jitsi study calls. Those providers may have their own terms and privacy practices. Study calls are a prototype and are not private rooms; anyone who obtains a room name may be able to join.",
+      "AI-generated summaries, flashcards, quizzes, and study suggestions are created by automated language models. While designed to assist student revision, AI outputs may occasionally contain inaccuracies or omissions.",
+      "AI study tools are intended to complement, not replace, primary coursework, textbook study, and instructor guidance. Students are responsible for verifying study content against official curriculum resources.",
     ],
   },
   {
-    heading: "Changes and availability",
+    heading: "5. Third-party integrations",
     paragraphs: [
-      "Features may change, be unavailable, or be discontinued. We may update these terms as the service evolves. Continued use after updated terms are posted means you accept the revised terms.",
-      "These terms explain the service at a general level and are not legal advice. Applicable consumer rights under local law remain unaffected.",
+      "StudyStation integrates with third-party providers including Google (for authentication), Supabase (for database hosting and storage), and speech-to-text / AI inference providers. Your use of third-party features is subject to the respective provider’s terms and acceptable use policies.",
+    ],
+  },
+  {
+    heading: "6. Account termination and data deletion",
+    paragraphs: [
+      "You have the right to terminate your account and request complete deletion of your personal data at any time via in-app account settings or by contacting studystation.support@gmail.com.",
+      "StudyStation reserves the right to suspend or terminate accounts that violate these terms, compromise system security, or engage in abusive or unlawful behavior.",
+    ],
+  },
+  {
+    heading: "7. Contact and support",
+    paragraphs: [
+      (
+        <span key="contact">
+          For legal inquiries, terms clarification, or platform assistance, please email our support team at{" "}
+          <a href="mailto:studystation.support@gmail.com" className="font-bold text-[#7259e8] underline">
+            studystation.support@gmail.com
+          </a>
+          .
+        </span>
+      ),
     ],
   },
 ];
@@ -55,7 +77,7 @@ export default function TermsPage() {
   return (
     <InfoPage
       title="Terms of Service"
-      description="Please read these terms before using StudyStation."
+      description="The rules and conditions governing your use of StudyStation."
       sections={sections}
     />
   );

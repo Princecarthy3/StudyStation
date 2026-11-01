@@ -108,6 +108,16 @@ export function AuthForm({ mode, notice, setupMessage, nextPath = "/app" }: { mo
               </>
             )}
           </button>
+          <p className="text-center text-[11px] leading-relaxed text-[#7a7388]">
+            By continuing, you agree to StudyStation’s{" "}
+            <Link href="/terms" className="font-bold text-[#7259e8] underline hover:text-[#5b43cf]">
+              Terms of Service
+            </Link>{" "}
+            and acknowledge our{" "}
+            <Link href="/privacy" className="font-bold text-[#7259e8] underline hover:text-[#5b43cf]">
+              Privacy Policy
+            </Link>.
+          </p>
           <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-[.12em] text-[#a29bb0]">
             <span className="h-px flex-1 bg-[#ebe7f1]" />
             or use email
