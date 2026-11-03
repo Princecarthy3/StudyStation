@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import katex from "katex";
 import {
   Archive,
   ArrowRight,
@@ -435,6 +436,48 @@ export function formatNoteMarkdown(note: OrganizedNoteData, lectureTitle: string
   return md;
 }
 
+function ReadableNoteText({ text }: { text: string }) {
+  const segments = text.split(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\n]+\$)/g);
+
+  return segments.map((segment, index) => {
+    let formula: string | null = null;
+    let displayMode = false;
+
+    if (segment.startsWith("$$") && segment.endsWith("$$")) {
+      formula = segment.slice(2, -2);
+      displayMode = true;
+    } else if (segment.startsWith("\\[") && segment.endsWith("\\]")) {
+      formula = segment.slice(2, -2);
+      displayMode = true;
+    } else if (segment.startsWith("\\(") && segment.endsWith("\\)")) {
+      formula = segment.slice(2, -2);
+    } else if (segment.startsWith("$") && segment.endsWith("$")) {
+      formula = segment.slice(1, -1);
+    }
+
+    if (formula === null) return segment;
+
+    const looksLikeMath =
+      /^[a-zA-Z]$/.test(formula.trim()) ||
+      /[=+*/^_<>]|\\[a-zA-Z]+|[a-zA-Z]\d|\d[a-zA-Z]/.test(formula);
+    if (!looksLikeMath) return segment;
+
+    const html = katex.renderToString(formula, {
+      displayMode,
+      throwOnError: false,
+      trust: false,
+    });
+
+    return (
+      <span
+        key={index}
+        className={displayMode ? "block max-w-full overflow-x-auto py-1 text-center" : "inline-block max-w-full overflow-x-auto align-middle"}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  });
+}
+
 export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
   const [revealedQuestions, setRevealedQuestions] = useState<Record<number, boolean>>({});
   const [checkedActions, setCheckedActions] = useState<Record<number, boolean>>({});
@@ -455,7 +498,7 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
           </span>
           <h3 className="text-xs font-black uppercase tracking-wider text-[#7259e8]">Executive Summary</h3>
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-[#352e46]">{note.summary}</p>
+        <p className="mt-3 text-xs leading-relaxed text-[#352e46]"><ReadableNoteText text={note.summary} /></p>
       </div>
 
       {/* Key Concepts / Vocabulary */}
@@ -471,8 +514,8 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
           <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
             {terms.map((item, idx) => (
               <div key={idx} className="rounded-xl border border-[#eae5f2] bg-white p-3.5 transition hover:border-[#cfc3f5] hover:shadow-sm">
-                <p className="break-words text-[11px] font-black text-[#7259e8]">{item.term}</p>
-                <p className="mt-1 break-words text-[11px] leading-relaxed text-[#564e65]">{item.definition}</p>
+                <p className="break-words text-[11px] font-black text-[#7259e8]"><ReadableNoteText text={item.term} /></p>
+                <p className="mt-1 break-words text-[11px] leading-relaxed text-[#564e65]"><ReadableNoteText text={item.definition} /></p>
               </div>
             ))}
           </div>
@@ -490,13 +533,13 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
           </div>
           {sections.map((section, idx) => (
             <div key={idx} className="rounded-2xl border border-[#ebe7f2] bg-white p-5 shadow-sm">
-              <h5 className="text-[13px] font-black text-[#17132d]">{section.heading}</h5>
-              <p className="mt-2 text-xs leading-relaxed text-[#403950] whitespace-pre-line">{section.body}</p>
+              <h5 className="text-[13px] font-black text-[#17132d]"><ReadableNoteText text={section.heading} /></h5>
+              <p className="mt-2 text-xs leading-relaxed text-[#403950] whitespace-pre-line"><ReadableNoteText text={section.body} /></p>
               {section.bullets && section.bullets.length > 0 && (
                 <ul className="mt-3 space-y-1.5 border-l-2 border-[#7259e8]/30 pl-3">
                   {section.bullets.map((bullet, bIdx) => (
                     <li key={bIdx} className="text-[11px] leading-relaxed text-[#5a5367]">
-                      • {bullet}
+                      • <ReadableNoteText text={bullet} />
                     </li>
                   ))}
                 </ul>
@@ -504,7 +547,7 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
               {section.takeaways && section.takeaways.length > 0 && (
                 <div className="mt-3 rounded-xl bg-[#f5f3fc] px-3.5 py-2 text-[10px] text-[#634cc7]">
                   <span className="font-extrabold uppercase tracking-wide">Key Insight: </span>
-                  {section.takeaways.join("; ")}
+                  <ReadableNoteText text={section.takeaways.join("; ")} />
                 </div>
               )}
             </div>
@@ -525,7 +568,7 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
             {takeaways.map((takeaway, idx) => (
               <li key={idx} className="flex items-start gap-2 text-xs leading-relaxed text-[#2a5d40]">
                 <span className="mt-1 size-1.5 shrink-0 rounded-full bg-[#2da365]" />
-                <span>{takeaway}</span>
+                <span><ReadableNoteText text={takeaway} /></span>
               </li>
             ))}
           </ul>
@@ -550,7 +593,7 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-xs font-bold text-[#17132d]">
                       <span className="font-black text-[#7259e8]">Q{idx + 1}. </span>
-                      {q.question}
+                      <ReadableNoteText text={q.question} />
                     </p>
                     {q.answer && (
                       <button
@@ -565,7 +608,7 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
                   {isRevealed && q.answer && (
                     <div className="mt-3 rounded-lg border border-[#e5def7] bg-[#faf8ff] p-3 text-[11px] leading-relaxed text-[#4e4560]">
                       <span className="font-black text-[#7259e8]">Answer: </span>
-                      {q.answer}
+                      <ReadableNoteText text={q.answer} />
                     </div>
                   )}
                 </div>
@@ -590,7 +633,7 @@ export function OrganizedNotesDisplay({ note }: { note: OrganizedNoteData }) {
                     onChange={() => setCheckedActions((prev) => ({ ...prev, [idx]: !prev[idx] }))}
                     className="mt-0.5 accent-[#7259e8]"
                   />
-                  <span className={isDone ? "line-through opacity-60" : ""}>{item}</span>
+                  <span className={isDone ? "line-through opacity-60" : ""}><ReadableNoteText text={item} /></span>
                 </label>
               );
             })}

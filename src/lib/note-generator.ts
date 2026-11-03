@@ -239,6 +239,7 @@ Guidelines:
 - Identify 3 to 6 logical thematic sections based on the natural flow of the lecture.
 - Extract 4 to 8 critical technical or academic key terms.
 - Provide 3 to 5 active recall study questions with model answers.
+- Write mathematical expressions in LaTeX, using $...$ for inline expressions and $$...$$ for standalone equations so they can be rendered clearly. Escape LaTeX backslashes for valid JSON strings (for example, write \\\\frac in JSON).
 - Output ONLY valid JSON. No markdown backticks or commentary outside the JSON object.`;
 
   const userPrompt = `LECTURE TITLE: "${title}"
