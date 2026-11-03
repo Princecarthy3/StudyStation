@@ -1787,7 +1787,7 @@ function FunctionalNoteModal({
                     <Maximize2 className="size-3.5" /> Full Screen
                   </button>
                   <a
-                    href={lecture.mediaUrl || `/api/lectures/${lecture.id}/media`}
+                    href={`/api/lectures/${lecture.id}/media`}
                     target="_blank"
                     rel="noreferrer"
                     download
@@ -1907,7 +1907,7 @@ function FunctionalNoteModal({
                         <Maximize2 className="size-3" /> Full Screen
                       </button>
                       <a
-                        href={lecture.mediaUrl || `/api/lectures/${lecture.id}/media`}
+                        href={`/api/lectures/${lecture.id}/media`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex h-7 items-center gap-1 rounded-md border border-[#e6e2eb] bg-white px-2 text-xs font-bold text-[#555064] hover:bg-[#fbfaff]"
@@ -1916,7 +1916,7 @@ function FunctionalNoteModal({
                       </a>
                     </div>
                   </div>
-                  <iframe title={`Original file: ${lecture.title}`} src={`/api/lectures/${lecture.id}/media`} className="h-[min(65vh,700px)] w-full bg-white" />
+                  <iframe title={`Original file: ${lecture.title}`} src={`/api/lectures/${lecture.id}/media#toolbar=1&navpanes=1&view=FitH`} className="h-[min(65vh,700px)] w-full bg-white" allow="fullscreen" />
                 </div>
               ) : lecture.transcript ? (
                 <div className="rounded-2xl bg-[#f7f5ff] p-5 border border-[#e4ddfa]">
@@ -2066,7 +2066,7 @@ function FunctionalNoteModal({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <a
-                href={lecture.mediaUrl || `/api/lectures/${lecture.id}/media`}
+                href={`/api/lectures/${lecture.id}/media`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 transition"
@@ -2074,7 +2074,7 @@ function FunctionalNoteModal({
                 Open in Tab
               </a>
               <a
-                href={lecture.mediaUrl || `/api/lectures/${lecture.id}/media`}
+                href={`/api/lectures/${lecture.id}/media`}
                 target="_blank"
                 rel="noreferrer"
                 download
@@ -2093,13 +2093,24 @@ function FunctionalNoteModal({
               </button>
             </div>
           </div>
-          {/* Iframe */}
-          <div className="flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl">
-            <iframe
-              title={`Full screen: ${lecture.title}`}
-              src={`/api/lectures/${lecture.id}/media`}
-              className="h-full w-full border-0 bg-white"
-            />
+          {/* Document viewer — same-origin proxy + explicit height for reliable PDF rendering */}
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl"
+            style={{ height: "calc(100dvh - 5.5rem)" }}
+          >
+            <object
+              data={`/api/lectures/${lecture.id}/media#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+              type="application/pdf"
+              className="h-full w-full"
+              aria-label={`Full screen: ${lecture.title}`}
+            >
+              <iframe
+                title={`Full screen: ${lecture.title}`}
+                src={`/api/lectures/${lecture.id}/media#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+                className="h-full w-full border-0 bg-white"
+                allow="fullscreen"
+              />
+            </object>
           </div>
         </div>
       )}

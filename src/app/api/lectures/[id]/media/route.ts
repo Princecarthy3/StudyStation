@@ -45,6 +45,39 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "No media file associated with this lecture." }, { status: 404 });
   }
 
+  const storagePath = String(lecture.storage_path || "");
+  const pathLower = storagePath.toLowerCase();
+  let contentType = lecture.mime_type || "application/octet-stream";
+  if (pathLower.endsWith(".pdf") || contentType.includes("pdf")) contentType = "application/pdf";
+  else if (pathLower.endsWith(".png")) contentType = "image/png";
+  else if (pathLower.endsWith(".jpg") || pathLower.endsWith(".jpeg")) contentType = "image/jpeg";
+  else if (pathLower.endsWith(".webp")) contentType = "image/webp";
+  else if (pathLower.endsWith(".txt") || pathLower.endsWith(".md")) contentType = "text/plain; charset=utf-8";
+
+  const extension =
+    pathLower.endsWith(".pdf") || contentType === "application/pdf" ? ".pdf" :
+    pathLower.endsWith(".png") ? ".png" :
+    pathLower.endsWith(".jpg") || pathLower.endsWith(".jpeg") ? ".jpg" :
+    pathLower.endsWith(".webp") ? ".webp" :
+    pathLower.endsWith(".txt") ? ".txt" :
+    pathLower.endsWith(".md") ? ".md" : "";
+  const safeTitle = String(lecture.title || "lecture-media").replace(/[^\w.\-() ]+/g, "_").slice(0, 80);
+  const filename = `${safeTitle}${extension}`;
+  const rangeHeader = request.headers.get("range");
+
+  // PDFs and full-file document views: redirect to a short-lived signed URL so the
+  // browser streams directly from storage (avoids blank pages from truncated
+  // serverless buffers on large lecture decks).
+  const isDocument = contentType === "application/pdf" || contentType.startsWith("image/") || contentType.startsWith("text/");
+  if (!rangeHeader && isDocument) {
+    const { data: signed, error: signedError } = await supabase.storage
+      .from("lecture-media")
+      .createSignedUrl(lecture.storage_path, 3600);
+    if (!signedError && signed?.signedUrl) {
+      return NextResponse.redirect(signed.signedUrl, 302);
+    }
+  }
+
   const { data: object, error: downloadError } = await supabase.storage
     .from("lecture-media")
     .download(lecture.storage_path);
@@ -55,15 +88,13 @@ export async function GET(request: Request, context: RouteContext) {
 
   const buffer = Buffer.from(await object.arrayBuffer());
   const total = buffer.byteLength;
-  const contentType = lecture.mime_type || "audio/webm";
-  const filename = encodeURIComponent(lecture.title || "lecture-media");
-  const rangeHeader = request.headers.get("range");
 
   const commonHeaders: Record<string, string> = {
     "Content-Type": contentType,
     "Accept-Ranges": "bytes",
     "Cache-Control": "private, max-age=3600",
-    "Content-Disposition": `inline; filename="${filename}"`,
+    "Content-Disposition": `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    "X-Content-Type-Options": "nosniff",
   };
 
   if (rangeHeader) {

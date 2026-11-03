@@ -1196,7 +1196,7 @@ export function LectureStudio({
                     </div>
                   </div>
                   {selected.mediaUrl ? (
-                    <iframe title={`Original file: ${selected.title}`} src={selected.mediaUrl} className="h-[min(65vh,700px)] w-full bg-white" />
+                    <iframe title={`Original file: ${selected.title}`} src={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=1&view=FitH`} className="h-[min(65vh,700px)] w-full bg-white" allow="fullscreen" />
                   ) : (
                     <iframe title={`Original file: ${selected.title}`} src={`/api/lectures/${selected.id}/media`} className="h-[min(65vh,700px)] w-full bg-white" />
                   )}
@@ -1281,7 +1281,7 @@ export function LectureStudio({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <a
-              href={selected.mediaUrl || `/api/lectures/${selected.id}/media`}
+              href={`/api/lectures/${selected.id}/media`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 transition"
@@ -1289,7 +1289,7 @@ export function LectureStudio({
               Open in Tab
             </a>
             <a
-              href={selected.mediaUrl || `/api/lectures/${selected.id}/media`}
+              href={`/api/lectures/${selected.id}/media`}
               target="_blank"
               rel="noreferrer"
               download
@@ -1308,13 +1308,21 @@ export function LectureStudio({
             </button>
           </div>
         </div>
-        {/* Iframe */}
-        <div className="flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl">
-          <iframe
-            title={`Full screen: ${selected.title}`}
-            src={selected.mediaUrl || `/api/lectures/${selected.id}/media`}
-            className="h-full w-full border-0 bg-white"
-          />
+        {/* Document viewer — same-origin proxy so Chrome/Safari PDF viewer can embed reliably */}
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl" style={{ height: "calc(100dvh - 5.5rem)" }}>
+          <object
+            data={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+            type="application/pdf"
+            className="h-full w-full"
+            aria-label={`Full screen: ${selected.title}`}
+          >
+            <iframe
+              title={`Full screen: ${selected.title}`}
+              src={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+              className="h-full w-full border-0 bg-white"
+              allow="fullscreen"
+            />
+          </object>
         </div>
       </div>
     )}
