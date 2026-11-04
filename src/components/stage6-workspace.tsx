@@ -675,6 +675,8 @@ export function LectureStudio({
   const [dirty, setDirty] = useState(false);
   const [fullScreenDoc, setFullScreenDoc] = useState(false);
   const [notesFullscreen, setNotesFullscreen] = useState(false);
+  const [lectureList, setLectureList] = useState(lectures);
+  useEffect(() => { setLectureList(lectures); }, [lectures]);
   const courseNames = useMemo(() => new Map(courses.map((course) => [course.id, `${course.code} · ${course.title}`])), [courses]);
 
   useEffect(() => {
@@ -756,7 +758,7 @@ export function LectureStudio({
   // Poll while any lecture (or the selected one) is processing so long transcriptions show live part progress.
   useEffect(() => {
     const hasProcessing =
-      lectures.some((l) => l.status === "processing") || selected?.status === "processing";
+      lectureList.some((l) => l.status === "processing") || selected?.status === "processing";
     if (!hasProcessing) return;
     const timer = setInterval(() => {
       router.refresh();
@@ -773,7 +775,7 @@ export function LectureStudio({
       }
     }, 8_000);
     return () => clearInterval(timer);
-  }, [lectures, selected?.id, selected?.status, router, fetchLectureDetail]);
+  }, [lectureList, selected?.id, selected?.status, router, fetchLectureDetail]);
 
   async function saveTranscript() {
     if (!selected) return;
@@ -852,24 +854,26 @@ export function LectureStudio({
 
   async function deleteLecture(lecture: Stage6Lecture) {
     if (!window.confirm(`Delete "${lecture.title}" and its transcript? This also deletes its derived notes and study materials.`)) return;
-    setBusy(true);
     setError("");
     setNotice("");
+    const previous = lectureList;
+    setLectureList((list) => list.filter((item) => item.id !== lecture.id));
+    if (selected?.id === lecture.id) {
+      setSelected(null);
+      setTranscriptDraft("");
+    }
+    setNotice("Lecture deleted.");
+    onToast?.("Lecture deleted.", "success");
     try {
       const response = await fetch(`/api/lectures/${lecture.id}`, { method: "DELETE" });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || "Lecture could not be deleted.");
-      if (selected?.id === lecture.id) {
-        setSelected(null);
-        setTranscriptDraft("");
-      }
-      setNotice("Lecture and associated study content deleted.");
-      onToast?.("Lecture deleted.", "success");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Lecture could not be deleted.");
-    } finally {
-      setBusy(false);
+      setLectureList(previous);
+      const message = cause instanceof Error ? cause.message : "Lecture could not be deleted.";
+      setError(message);
+      onToast?.(message, "error");
     }
   }
 
@@ -940,7 +944,7 @@ export function LectureStudio({
     URL.revokeObjectURL(url);
   }
 
-  const sortedLectures = useMemo(() => [...lectures].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [lectures]);
+  const sortedLectures = useMemo(() => [...lectureList].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [lectureList]);
 
   return <div className="fade-up">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
