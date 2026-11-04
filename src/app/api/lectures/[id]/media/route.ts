@@ -65,11 +65,13 @@ export async function GET(request: Request, context: RouteContext) {
   const filename = `${safeTitle}${extension}`;
   const rangeHeader = request.headers.get("range");
 
-  // PDFs and full-file document views: redirect to a short-lived signed URL so the
-  // browser streams directly from storage (avoids blank pages from truncated
-  // serverless buffers on large lecture decks).
+  // For native browser tab opens, redirect PDFs to a signed storage URL so large
+  // decks stream without serverless buffering. In-app PDF.js uses ?proxy=1 to
+  // force same-origin bytes (avoids CORS on the storage host).
+  const url = new URL(request.url);
+  const forceProxy = url.searchParams.get("proxy") === "1";
   const isDocument = contentType === "application/pdf" || contentType.startsWith("image/") || contentType.startsWith("text/");
-  if (!rangeHeader && isDocument) {
+  if (!rangeHeader && isDocument && !forceProxy) {
     const { data: signed, error: signedError } = await supabase.storage
       .from("lecture-media")
       .createSignedUrl(lecture.storage_path, 3600);

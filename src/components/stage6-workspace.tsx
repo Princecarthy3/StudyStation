@@ -26,6 +26,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { PdfPageViewer } from "@/components/pdf-page-viewer";
 import type { ReactNode } from "react";
 import { AudioPlayer } from "@/components/audio-player";
 import { exportNoteToPdf } from "@/lib/pdf-export";
@@ -1196,7 +1197,9 @@ export function LectureStudio({
                     </div>
                   </div>
                   {selected.mediaUrl ? (
-                    <iframe title={`Original file: ${selected.title}`} src={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=1&view=FitH`} className="h-[min(65vh,700px)] w-full bg-white" allow="fullscreen" />
+                    <div className="h-[min(65vh,700px)] w-full overflow-hidden bg-white">
+                      <PdfPageViewer src={`/api/lectures/${selected.id}/media?proxy=1`} title={selected.title} className="h-full" />
+                    </div>
                   ) : (
                     <iframe title={`Original file: ${selected.title}`} src={`/api/lectures/${selected.id}/media`} className="h-[min(65vh,700px)] w-full bg-white" />
                   )}
@@ -1308,20 +1311,12 @@ export function LectureStudio({
             </a>
           </div>
         </div>
-        <div className="relative min-h-0 flex-1 overflow-auto bg-white sm:overflow-hidden sm:rounded-2xl sm:border sm:border-black/10 sm:shadow-2xl">
-          <object
-            data={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-            type="application/pdf"
-            className="block h-full min-h-[70dvh] w-full sm:min-h-0"
-            aria-label={`Full screen: ${selected.title}`}
-          >
-            <iframe
-              title={`Full screen: ${selected.title}`}
-              src={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-              className="block h-full min-h-[70dvh] w-full border-0 bg-white sm:min-h-0"
-              allow="fullscreen"
-            />
-          </object>
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-white sm:rounded-2xl sm:border sm:border-black/10 sm:shadow-2xl">
+          <PdfPageViewer
+            src={`/api/lectures/${selected.id}/media?proxy=1`}
+            title={selected.title}
+            className="h-full"
+          />
         </div>
       </div>
     )}

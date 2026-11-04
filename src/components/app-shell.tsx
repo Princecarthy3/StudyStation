@@ -71,6 +71,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
+import { PdfPageViewer } from "@/components/pdf-page-viewer";
 import { ProfileSettings } from "@/components/profile-settings";
 import { useTheme } from "@/components/theme-provider";
 import { useInstallApp } from "@/components/install-app";
@@ -1916,7 +1917,9 @@ function FunctionalNoteModal({
                       </a>
                     </div>
                   </div>
-                  <iframe title={`Original file: ${lecture.title}`} src={`/api/lectures/${lecture.id}/media#toolbar=1&navpanes=1&view=FitH`} className="h-[min(65vh,700px)] w-full bg-white" allow="fullscreen" />
+                  <div className="h-[min(65vh,700px)] w-full overflow-hidden bg-white">
+                    <PdfPageViewer src={`/api/lectures/${lecture.id}/media?proxy=1`} title={lecture.title} className="h-full" />
+                  </div>
                 </div>
               ) : lecture.transcript ? (
                 <div className="rounded-2xl bg-[#f7f5ff] p-5 border border-[#e4ddfa]">
@@ -2093,21 +2096,12 @@ function FunctionalNoteModal({
               </a>
             </div>
           </div>
-          {/* Viewer fills remaining viewport; overflow scroll helps mobile Safari */}
-          <div className="relative min-h-0 flex-1 overflow-auto bg-white sm:overflow-hidden sm:rounded-2xl sm:border sm:border-black/10 sm:shadow-2xl">
-            <object
-              data={`/api/lectures/${lecture.id}/media#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-              type="application/pdf"
-              className="block h-full min-h-[70dvh] w-full sm:min-h-0"
-              aria-label={`Full screen: ${lecture.title}`}
-            >
-              <iframe
-                title={`Full screen: ${lecture.title}`}
-                src={`/api/lectures/${lecture.id}/media#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
-                className="block h-full min-h-[70dvh] w-full border-0 bg-white sm:min-h-0"
-                allow="fullscreen"
-              />
-            </object>
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-white sm:rounded-2xl sm:border sm:border-black/10 sm:shadow-2xl">
+            <PdfPageViewer
+              src={`/api/lectures/${lecture.id}/media?proxy=1`}
+              title={lecture.title}
+              className="h-full"
+            />
           </div>
         </div>
       )}
