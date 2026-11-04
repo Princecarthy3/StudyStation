@@ -263,16 +263,13 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
       if (data.inviteUrl) {
         setInviteUrl(data.inviteUrl);
         setNotice("Invitation created. It expires in seven days and can be used up to 20 times.");
-      } else if (action === "leave") {
-        setNotice("You left the study group.");
+      } else if (action === "leave" || action === "delete_group") {
+        const leftId = selectedId;
+        setNotice(action === "leave" ? "You left the study group." : "Study group deleted.");
         setSelectedId("");
         setDetail(null);
-        await loadGroups();
-      } else if (action === "delete_group") {
-        setNotice("Study group deleted.");
-        setSelectedId("");
-        setDetail(null);
-        await loadGroups();
+        setGroups((list) => list.filter((group) => group.id !== leftId));
+        void loadGroups();
       } else {
         const silent = action === "message" || action === "edit_message" || action === "delete_message" || action === "start_call";
         setNotice(silent || action === "start_call" ? "" : "Group updated.");

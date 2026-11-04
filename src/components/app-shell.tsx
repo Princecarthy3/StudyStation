@@ -198,6 +198,10 @@ export function AppShell({
   const [modal, setModal] = useState<Modal>(null);
   const [sourceTab, setSourceTab] = useState<SourceTab>("record");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [liveDashboard, setLiveDashboard] = useState(dashboardData);
+  useEffect(() => {
+    setLiveDashboard(dashboardData);
+  }, [dashboardData]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const notifiedIds = useRef<Set<string> | null>(null);
@@ -250,8 +254,8 @@ export function AppShell({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const courseMap = useMemo(
-    () => new Map(dashboardData.courses.map((course) => [course.id, course])),
-    [dashboardData.courses]
+    () => new Map(liveDashboard.courses.map((course) => [course.id, course])),
+    [liveDashboard.courses]
   );
 
   const userInitials = useMemo(() => {
@@ -716,6 +720,22 @@ export function AppShell({
       } catch {
         showToast(isDoc ? "Lecture text ready. You can generate notes anytime from the lecture view." : "Lecture transcript ready. You can generate notes anytime from the lecture view.", "success");
       }
+      setLiveDashboard((prev) => ({
+        ...prev,
+        lectures: [
+          {
+            id: created.lectureId as string,
+            title: (lectureTitle || file.name || "New lecture").slice(0, 160),
+            courseId: courseValue || null,
+            status: "ready",
+            sourceType: /\.(pdf|docx|doc|pptx|ppt|txt|md|rtf)$/i.test(file.name) ? "document" : "audio",
+            createdAt: new Date().toISOString(),
+            durationSeconds: null,
+            processingError: null,
+          },
+          ...prev.lectures.filter((item) => item.id !== created.lectureId),
+        ],
+      }));
       setModal(null);
       setView("lectures");
       setAutoOpenLectureId(created.lectureId);
@@ -771,7 +791,7 @@ export function AppShell({
 
     const targetLectureId = specificLectureId || selectedChatLectureId;
     const targetLecture =
-      targetLectureId !== "all" ? dashboardData.lectures.find((l) => l.id === targetLectureId) : null;
+      targetLectureId !== "all" ? liveDashboard.lectures.find((l) => l.id === targetLectureId) : null;
     const targetCourse = targetLecture?.courseId ? courseMap.get(targetLecture.courseId) : null;
 
     const contextPayload = targetLecture
@@ -783,8 +803,8 @@ export function AppShell({
         }
       : {
           studentName: firstName,
-          courses: dashboardData.courses.map((c) => `${c.code}: ${c.title}`),
-          recentLectures: dashboardData.lectures.slice(0, 5).map((l) => ({
+          courses: liveDashboard.courses.map((c) => `${c.code}: ${c.title}`),
+          recentLectures: liveDashboard.lectures.slice(0, 5).map((l) => ({
             title: l.title,
             course: l.courseId ? courseMap.get(l.courseId)?.code : undefined,
             transcriptSnippet: l.transcript?.slice(0, 600) ?? undefined,
@@ -802,8 +822,8 @@ export function AppShell({
 
       const citationTag = targetLecture
         ? `${targetCourse ? targetCourse.code : "Lecture"} · ${targetLecture.title}`
-        : dashboardData.courses.length
-        ? `${dashboardData.courses[0].code} · Course Material`
+        : liveDashboard.courses.length
+        ? `${liveDashboard.courses[0].code} · Course Material`
         : undefined;
 
       setMessages((current) => [
@@ -911,8 +931,8 @@ export function AppShell({
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between text-[9px] font-bold text-white/40">
-            <span>{dashboardData.courses.length} courses</span>
-            <span>{dashboardData.lectures.length} lectures</span>
+            <span>{liveDashboard.courses.length} courses</span>
+            <span>{liveDashboard.lectures.length} lectures</span>
           </div>
         </button>
 
@@ -1024,7 +1044,7 @@ export function AppShell({
 
                   <div className="my-3 border-t border-[#f0edf5]" />
                   <p className="mb-2 text-[9px] font-black uppercase tracking-wide text-[#8e8895]">Study tasks</p>
-                  {dashboardData.tasks.length === 0 ? <p className="text-center text-[10px] text-[#868093]">No upcoming deadlines or pending tasks.</p> : dashboardData.tasks.slice(0, 3).map((task) => (
+                  {liveDashboard.tasks.length === 0 ? <p className="text-center text-[10px] text-[#868093]">No upcoming deadlines or pending tasks.</p> : liveDashboard.tasks.slice(0, 3).map((task) => (
                     <p key={task.id} className="truncate py-1 text-[10px] font-semibold text-[#514b5e]">{task.title}</p>
                   ))}
 
@@ -1053,7 +1073,7 @@ export function AppShell({
         <main className="mx-auto max-w-[1440px] px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8">
           {view === "dashboard" && (
             <Stage6Dashboard
-              data={dashboardData}
+              data={liveDashboard}
               plannerData={plannerData}
               fullName={profile.fullName}
               onCapture={() => {
@@ -1083,7 +1103,7 @@ export function AppShell({
 
           {view === "courses" && (
             <Stage6Courses
-              data={dashboardData}
+              data={liveDashboard}
               search={search}
               selectedCourseId={selectedCourseId}
               onOpenCourse={setSelectedCourseId}
@@ -1097,10 +1117,10 @@ export function AppShell({
 
           {view === "lectures" && (
             <LectureStudio
-              lectures={dashboardData.lectures}
-              courses={dashboardData.courses}
-              timezone={dashboardData.timezone}
-              loadError={dashboardData.errors.lectures}
+              lectures={liveDashboard.lectures}
+              courses={liveDashboard.courses}
+              timezone={liveDashboard.timezone}
+              loadError={liveDashboard.errors.lectures}
               autoOpenLectureId={autoOpenLectureId}
               onAutoOpen={clearAutoOpenLecture}
               onToast={showToast}
@@ -1113,9 +1133,9 @@ export function AppShell({
 
           {view === "notes" && (
             <FunctionalNotesView
-              lectures={dashboardData.lectures}
-              courses={dashboardData.courses}
-              timezone={dashboardData.timezone}
+              lectures={liveDashboard.lectures}
+              courses={liveDashboard.courses}
+              timezone={liveDashboard.timezone}
               search={search}
               onNote={openNote}
               onCapture={() => setModal("capture")}
@@ -1125,8 +1145,8 @@ export function AppShell({
 
           {view === "flashcards" && (
             <FunctionalFlashcardsView
-              courses={dashboardData.courses}
-              lectures={dashboardData.lectures}
+              courses={liveDashboard.courses}
+              lectures={liveDashboard.lectures}
               progress={plannerData.progress}
               onOpenStudyLab={() => navigate("study-lab")}
             />
@@ -1137,12 +1157,12 @@ export function AppShell({
               progress={plannerData.progress}
               hasError={plannerData.errors.progress}
               onOpenStudyLab={() => navigate("study-lab")}
-              timezone={dashboardData.timezone}
+              timezone={liveDashboard.timezone}
             />
           )}
 
           {view === "planner" && (
-            <StudyCalendar data={plannerData} courses={dashboardData.courses} timezone={dashboardData.timezone} />
+            <StudyCalendar data={plannerData} courses={liveDashboard.courses} timezone={liveDashboard.timezone} />
           )}
 
           {view === "study-lab" && <AiStudyLab />}
@@ -1161,8 +1181,8 @@ export function AppShell({
           {view === "assistant" && (
             <FunctionalAssistantView
               studentName={firstName}
-              lectures={dashboardData.lectures}
-              courses={dashboardData.courses}
+              lectures={liveDashboard.lectures}
+              courses={liveDashboard.courses}
               selectedLectureId={selectedChatLectureId}
               setSelectedLectureId={setSelectedChatLectureId}
               messages={messages}
@@ -1250,7 +1270,7 @@ export function AppShell({
         <FunctionalNoteModal
           lecture={activeLectureNote}
           course={activeLectureNote.courseId ? courseMap.get(activeLectureNote.courseId) : undefined}
-          timezone={dashboardData.timezone}
+          timezone={liveDashboard.timezone}
           close={() => setModal(null)}
           onNoteUpdated={(note) => {
             setActiveLectureNote((prev) => (prev ? { ...prev, note } : null));
