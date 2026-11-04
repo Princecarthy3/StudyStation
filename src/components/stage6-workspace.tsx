@@ -1267,24 +1267,33 @@ export function LectureStudio({
 
       {/* Full Screen Document / PDF Modal */}
     {fullScreenDoc && selected && selected.sourceType === "document" && (
-      <div className="fixed inset-0 z-[120] flex flex-col bg-[#12101e]/90 p-2 sm:p-4 backdrop-blur-md animate-in fade-in">
-        {/* Top Bar */}
-        <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-[#1d192e] px-4 py-3 text-white shadow-xl">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white">
-              <FileText className="size-5" />
+      <div className="fixed inset-0 z-[120] flex flex-col bg-[#12101e] p-0 sm:bg-[#12101e]/90 sm:p-4 sm:backdrop-blur-md animate-in fade-in">
+        {/* Top Bar — stacks on mobile so title never collapses letter-by-letter */}
+        <div className="shrink-0 border-b border-white/10 bg-[#1d192e] px-3 py-2.5 text-white sm:mb-2 sm:rounded-2xl sm:border sm:px-4 sm:py-3 sm:shadow-xl">
+          <div className="flex items-center gap-2">
+            <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#7259e8] text-white sm:size-9 sm:rounded-xl">
+              <FileText className="size-4 sm:size-5" />
             </div>
-            <div className="min-w-0">
-              <h3 className="truncate text-sm sm:text-base font-black">{selected.title}</h3>
-              <p className="text-xs text-[#a9a2bc]">Original Document Preview · Full Screen</p>
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-[13px] font-black sm:text-base">{selected.title}</h3>
+              <p className="truncate text-[10px] text-[#a9a2bc] sm:text-xs">Original document · Full screen</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setFullScreenDoc(false)}
+              className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition"
+              aria-label="Exit Full Screen"
+              title="Exit Full Screen (Esc)"
+            >
+              <X className="size-5" />
+            </button>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="mt-2 flex items-center gap-2">
             <a
               href={`/api/lectures/${selected.id}/media`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 transition"
+              className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 transition sm:flex-none"
             >
               Open in Tab
             </a>
@@ -1293,33 +1302,23 @@ export function LectureStudio({
               target="_blank"
               rel="noreferrer"
               download
-              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 transition"
+              className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-bold text-white hover:bg-white/20 transition sm:flex-none"
             >
               <Download className="size-3.5" /> Download
             </a>
-            <button
-              type="button"
-              onClick={() => setFullScreenDoc(false)}
-              className="grid size-8 place-items-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition"
-              aria-label="Exit Full Screen"
-              title="Exit Full Screen (Esc)"
-            >
-              <X className="size-5" />
-            </button>
           </div>
         </div>
-        {/* Document viewer — same-origin proxy so Chrome/Safari PDF viewer can embed reliably */}
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl" style={{ height: "calc(100dvh - 5.5rem)" }}>
+        <div className="relative min-h-0 flex-1 overflow-auto bg-white sm:overflow-hidden sm:rounded-2xl sm:border sm:border-black/10 sm:shadow-2xl">
           <object
-            data={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+            data={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
             type="application/pdf"
-            className="h-full w-full"
+            className="block h-full min-h-[70dvh] w-full sm:min-h-0"
             aria-label={`Full screen: ${selected.title}`}
           >
             <iframe
               title={`Full screen: ${selected.title}`}
-              src={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
-              className="h-full w-full border-0 bg-white"
+              src={`/api/lectures/${selected.id}/media#toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
+              className="block h-full min-h-[70dvh] w-full border-0 bg-white sm:min-h-0"
               allow="fullscreen"
             />
           </object>
