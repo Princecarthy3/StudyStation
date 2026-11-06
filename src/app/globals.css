@@ -926,36 +926,56 @@ html.motion-ready [data-card-reveal]:nth-child(6) { transition-delay: 400ms; }
 
 
 /* ——— Flashcards: readable in light and dark ——— */
-.flashcard-face {
-  background: linear-gradient(135deg, #fbfaff 0%, #f3efff 100%) !important;
-  border-color: #ddd4f5 !important;
+.workspace-shell .flashcard-face {
+  background: linear-gradient(135deg, #ffffff 0%, #f4f0ff 100%) !important;
+  border: 1px solid #ddd4f5 !important;
   color: #17132d !important;
 }
-.flashcard-text {
+.workspace-shell .flashcard-text {
   color: #17132d !important;
   opacity: 1 !important;
+  -webkit-text-fill-color: #17132d !important;
 }
-.flashcard-chip {
+.workspace-shell .flashcard-chip {
   background: #ffffff !important;
   color: #7259e8 !important;
+  border: 1px solid #e4ddf8;
+}
+.workspace-shell .flashcard-know {
+  background: #e5f7ed !important;
+  color: #1f6b48 !important;
+  border: 1px solid #bfe8d0 !important;
 }
 html[data-theme="dark"] .workspace-shell .flashcard-face {
-  background: linear-gradient(145deg, #2a2740 0%, #1f1c30 100%) !important;
-  border-color: #4a4463 !important;
-  color: #f5f2fc !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(160deg, #35314c 0%, #252238 100%) !important;
+  border-color: #5a5478 !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 28px rgba(0, 0, 0, 0.25);
 }
 html[data-theme="dark"] .workspace-shell .flashcard-text {
-  color: #f5f2fc !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
 }
 html[data-theme="dark"] .workspace-shell .flashcard-chip {
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: #c4b5ff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #d4c8ff !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
 }
 html[data-theme="dark"] .workspace-shell .flashcard-stage {
   background-color: #1b1926 !important;
   border-color: #393648 !important;
+}
+html[data-theme="dark"] .workspace-shell .flashcard-know {
+  background: #2a4a3a !important;
+  color: #b6f0d0 !important;
+  border-color: #3d6b54 !important;
+}
+html[data-theme="dark"] .workspace-shell .flashcard-nav {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f0ecf8 !important;
 }
 
 /* ——— iOS-style glass selects ——— */
@@ -963,6 +983,7 @@ html[data-theme="dark"] .workspace-shell .flashcard-stage {
 html[data-theme="dark"] .workspace-shell select {
   appearance: none;
   -webkit-appearance: none;
+  min-height: 2.5rem;
   border-radius: 14px !important;
   border: 1px solid rgba(233, 229, 239, 0.95) !important;
   background-color: rgba(255, 255, 255, 0.88) !important;
@@ -1049,4 +1070,21 @@ html[data-theme="dark"] .workspace-shell [role="alertdialog"] {
 .workspace-shell .fixed.inset-0.bg-\[\#17132d\]\/55 {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+
+/* Auto-glass for modal sections */
+html[data-theme="dark"] .workspace-shell [role="dialog"] section,
+html[data-theme="dark"] .workspace-shell [aria-modal="true"] section {
+  background: rgba(28, 25, 42, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #f3f0fa !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+.workspace-shell [role="dialog"] section,
+.workspace-shell [aria-modal="true"] section {
+  border-radius: 22px !important;
+  box-shadow: 0 20px 60px rgba(23, 19, 45, 0.16) !important;
 }

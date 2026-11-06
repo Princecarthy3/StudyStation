@@ -101,9 +101,9 @@ export function GeneratedFlashcardsLibrary({ onOpenStudyLab }: { onOpenStudyLab:
                       <p className="flashcard-text mt-5 text-base font-extrabold leading-7">{flipped ? selected.output.cards[cardIndex].back : selected.output.cards[cardIndex].front}</p>
                     </button>
                     <div className="mt-4 flex items-center justify-between gap-2">
-                      <button type="button" onClick={() => moveCard(-1)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#e9e5ef] px-3 text-[10px] font-bold"><ChevronLeft className="size-4" /> Previous</button>
-                      <button type="button" onClick={() => { setMasteredCount((count) => count + 1); moveCard(1); }} className="inline-flex h-9 items-center gap-1 rounded-xl bg-[#e5f7ed] px-3 text-[10px] font-extrabold text-[#287451]"><CheckCircle2 className="size-4" /> Got it</button>
-                      <button type="button" onClick={() => moveCard(1)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#e9e5ef] px-3 text-[10px] font-bold">Next <ChevronRight className="size-4" /></button>
+                      <button type="button" onClick={() => moveCard(-1)} className="flashcard-nav inline-flex h-9 items-center gap-1 rounded-xl border border-[#e9e5ef] px-3 text-[10px] font-bold text-[#3d3650]"><ChevronLeft className="size-4" /> Previous</button>
+                      <button type="button" onClick={() => { setMasteredCount((count) => count + 1); moveCard(1); }} className="flashcard-know inline-flex h-9 items-center gap-1 rounded-xl px-3 text-[10px] font-extrabold"><CheckCircle2 className="size-4" /> Got it</button>
+                      <button type="button" onClick={() => moveCard(1)} className="flashcard-nav inline-flex h-9 items-center gap-1 rounded-xl border border-[#e9e5ef] px-3 text-[10px] font-bold text-[#3d3650]">Next <ChevronRight className="size-4" /></button>
                     </div>
                   </div>
                   <aside className="rounded-[24px] bg-[#17132d] p-5 text-white">
