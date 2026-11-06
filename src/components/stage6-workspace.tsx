@@ -1245,7 +1245,7 @@ export function LectureStudio({
         {notice && <p role="status" className="mt-3 rounded-xl bg-[#e8f7ef] px-3 py-2.5 text-xs text-[#2f946f]">{notice}</p>}
       </section>
     </div>
-    <p className="mt-4 text-xs leading-5 text-[#8a8494]">Only upload lecture materials you have permission to use. Original files are kept in your private account; audio and video are sent to your configured transcription provider.</p>
+    <p className="mt-4 text-xs leading-5 text-[#8a8494]">Only upload materials you have permission to use. Files stay private to your account.</p>
 
     
       {notesFullscreen && selected?.note && (

@@ -20,12 +20,12 @@
 html[data-theme="dark"] .workspace-shell {
   color-scheme: dark;
   --ink: #f3f0fa;
-  --muted: #aaa4b8;
+  --muted: #c8c2d6;
   --paper: #100f18;
   --lavender-soft: #302a48;
   --line: #353244;
   background: #100f18 !important;
-  color: #f3f0fa !important;
+  color: #f1edf8 !important;
 }
 
 html[data-theme="dark"] .workspace-shell .bg-white,
@@ -45,34 +45,89 @@ html[data-theme="dark"] .workspace-shell [class*="bg-[#f0"] {
   background-color: #242130 !important;
 }
 
-html[data-theme="dark"] .workspace-shell [class~="text-[#17132d]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#28233a]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#211b35]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#302a40]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#2a2440]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#252033]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#373145]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#3d374a]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#403b4b]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#343047]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#514a66]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#555064]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#605a72]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#625b6d]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#40384f]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#4e485b]"] {
-  color: #f3f0fa !important;
+/* Primary / body ink — must stay bright on dark surfaces */
+html[data-theme="dark"] .workspace-shell [class*="text-[#1"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#2"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#3"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#4"] {
+  color: #f1edf8 !important;
 }
 
-html[data-theme="dark"] .workspace-shell [class~="text-[#7d7789]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#85808d]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#878193]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#8a8494]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#696277]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#6e6a7e]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#6c667a]"],
-html[data-theme="dark"] .workspace-shell [class~="text-[#5f596b]"] {
-  color: #b9b3c7 !important;
+/* Muted / secondary labels — still readable, not washed out */
+html[data-theme="dark"] .workspace-shell [class*="text-[#5f"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#6"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#7d"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#7a"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#7e"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#8"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#9"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#a"] {
+  color: #c8c2d6 !important;
+}
+
+/* Keep pure white / near-white labels as-is on colored buttons */
+html[data-theme="dark"] .workspace-shell [class~="text-white"],
+html[data-theme="dark"] .workspace-shell .text-white {
+  color: #ffffff !important;
+}
+
+/* Brand purple accents stay vivid */
+html[data-theme="dark"] .workspace-shell [class*="text-[#7259e8]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#5e47c4]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#5b47bd]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#5f46dd]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#6247de]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#6247df]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#5540b8]"],
+html[data-theme="dark"] .workspace-shell [class*="text-[#5d4cb7]"] {
+  color: #b9a8ff !important;
+}
+
+/* Soft tinted info/success/error panels */
+html[data-theme="dark"] .workspace-shell [class*="bg-[#eeeaff]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#f1efff]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#f2efff]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#f3f0ff]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#f4f1fb]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#faf9fd]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#fbfaff]"] {
+  background-color: #2a2740 !important;
+  color: #e8e4f2 !important;
+}
+
+html[data-theme="dark"] .workspace-shell [class*="bg-[#fff1ef]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#fef2f2]"] {
+  background-color: #3a2428 !important;
+  color: #f5c4c0 !important;
+}
+
+html[data-theme="dark"] .workspace-shell [class*="bg-[#e6f7ef]"],
+html[data-theme="dark"] .workspace-shell [class*="bg-[#dff8ec]"] {
+  background-color: #1f332c !important;
+  color: #b6e5cf !important;
+}
+
+/* Chat / assistant bubbles */
+html[data-theme="dark"] .workspace-shell .assistant-bubble {
+  background-color: #252236 !important;
+  border-color: #3d3850 !important;
+  color: #f1edf8 !important;
+}
+
+html[data-theme="dark"] .workspace-shell .assistant-bubble strong,
+html[data-theme="dark"] .workspace-shell .assistant-bubble .font-semibold,
+html[data-theme="dark"] .workspace-shell .assistant-bubble .font-extrabold {
+  color: #ffffff !important;
+}
+
+/* Placeholder text */
+html[data-theme="dark"] .workspace-shell [class*="placeholder:text-"] {
+  --tw-placeholder-opacity: 1;
+}
+html[data-theme="dark"] .workspace-shell input::placeholder,
+html[data-theme="dark"] .workspace-shell textarea::placeholder {
+  color: #a59fba !important;
+  opacity: 1;
 }
 
 html[data-theme="dark"] .workspace-shell [class*="border-[#e"],

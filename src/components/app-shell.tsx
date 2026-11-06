@@ -2383,7 +2383,7 @@ function FormattedAssistantMessage({ content }: { content: string }) {
   };
 
   return (
-    <div className="space-y-2 text-[12px] leading-relaxed text-[#2c2638]">
+    <div className="space-y-2 text-[12px] leading-relaxed text-[#2c2638] [&_strong]:text-inherit">
       {blocks.map((block, idx) => {
         if (block.type === "heading") {
           return (
@@ -2491,12 +2491,7 @@ function FunctionalAssistantView({
             </div>
           </div>
 
-          <div className="rounded-xl bg-[#eeeaff] p-3 text-[10px] text-[#5540b8]">
-            <p className="font-extrabold">Accurate Citations</p>
-            <p className="mt-1 leading-4">
-              Answers cite your actual lecture titles and course notes. Critical facts should always be checked against course slides.
-            </p>
-          </div>
+
         </aside>
 
         {/* Chat Thread */}
@@ -2519,7 +2514,7 @@ function FunctionalAssistantView({
                   className={`max-w-[82%] rounded-2xl px-4 py-3 text-[12px] leading-relaxed ${
                     message.role === "user"
                       ? "rounded-br-md bg-[#17132d] text-white"
-                      : "rounded-bl-md bg-[#f4f1fb] text-[#2c2638] border border-[#e8e4f1]"
+                      : "assistant-bubble rounded-bl-md bg-[#f4f1fb] text-[#2c2638] border border-[#e8e4f1]"
                   }`}
                 >
                   {message.role === "user" ? (

@@ -176,7 +176,7 @@ export function PlannerOverview({
     <section aria-label="Learning progress from saved records" className="grid gap-3 sm:grid-cols-3">
       {progressCards.map((item) => <article key={item.label} className="rounded-2xl border border-[#e9e5ef] bg-white p-4"><p className="text-[9px] font-black uppercase tracking-[.1em] text-[#908a98]">{item.label}</p>{data.errors.progress ? <p className="mt-2 text-xs font-bold text-[#a44e48]">Could not load</p> : <><p className="mt-2 text-[24px] font-black tracking-tight text-[#17132d]">{item.value}</p><p className="mt-1 text-[9px] text-[#8a8494]">{item.detail}</p></>}</article>)}
     </section>
-    <p className="rounded-xl border border-[#eeeaf2] bg-[#fbfaff] px-4 py-3 text-[10px] leading-5 text-[#766f81]">Progress reflects saved records only; it is not a mastery score. In-app, email, and push reminders are not currently delivered, so check your planner for upcoming deadlines.</p>
+    <p className="rounded-xl border border-[#eeeaf2] bg-[#fbfaff] px-4 py-3 text-[10px] leading-5 text-[#766f81]">Progress reflects your saved tasks and attempts only.</p>
 
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
       <section className="rounded-[22px] border border-[#e9e5ef] bg-white p-4 sm:p-5">
