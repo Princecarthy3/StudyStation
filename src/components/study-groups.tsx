@@ -57,7 +57,7 @@ type GroupDetail = {
   nextMessageCursor: string | null;
   callEnabled?: boolean;
 };
-type ResourcePreview = { title: string; content: unknown; downloadUrl: string | null };
+type ResourcePreview = { title: string; content: unknown; downloadUrl: string | null; resourceType?: string; mimeType?: string | null };
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -74,6 +74,23 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime())
     ? "Time unavailable"
     : new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+
+function formatResourceContent(content: unknown): string {
+  if (!content || typeof content !== "object") return String(content ?? "");
+  const obj = content as Record<string, unknown>;
+  if (typeof obj.summary === "string" || obj.content) {
+    const parts: string[] = [];
+    if (typeof obj.summary === "string" && obj.summary.trim()) {
+      parts.push(`Summary\n${obj.summary.trim()}`);
+    }
+    if (typeof obj.content === "string") parts.push(obj.content);
+    else if (obj.content) parts.push(JSON.stringify(obj.content, null, 2));
+    return parts.join("\n\n") || JSON.stringify(content, null, 2);
+  }
+  if (obj.truncated && typeof obj.message === "string") return obj.message;
+  return JSON.stringify(content, null, 2);
 }
 
 export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionId }: { courses: Course[]; inviteToken?: string | null; initialGroupId?: string | null; callSessionId?: string | null }) {
@@ -483,9 +500,20 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
   const reportMailto = `mailto:studystation.support@gmail.com?subject=${encodeURIComponent(`StudyStation report: ${detail?.group.name ?? "Study group"}`)}&body=${encodeURIComponent(`Please describe the issue:\n${reportDetails.trim()}\n\nGroup: ${detail?.group.name ?? "Unknown"}\nGroup ID: ${selectedId || "Unknown"}${reportMessageId ? `\nMessage ID: ${reportMessageId}` : ""}`)}`;
 
   async function openResource(resource: SharedResource) {
+    setError("");
+    setNotice("");
     try {
       const data = await api<{ resource: ResourcePreview }>(`/api/study-groups/${selectedId}/resources/${resource.id}`, { cache: "no-store" });
-      setResourcePreview(data.resource);
+      const preview = data.resource;
+      setResourcePreview(preview);
+      // Files without inline content: open the signed URL in a new tab as well for mobile reliability
+      if (preview.downloadUrl && !preview.content) {
+        try {
+          window.open(preview.downloadUrl, "_blank", "noopener,noreferrer");
+        } catch {
+          // Modal still shows the Open button as fallback
+        }
+      }
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : "The shared resource could not be opened.");
     }
@@ -675,7 +703,54 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
     {showShareResources && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowShareResources(false);}}><section role="dialog" aria-modal="true" aria-labelledby="share-resources-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><h2 id="share-resources-title" className="text-sm font-extrabold">Share resources</h2><button type="button" onClick={() => setShowShareResources(false)} aria-label="Close shared resources" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><div className="space-y-4 p-5">{detail.ownResources?.length ? <div className="flex gap-2"><select value={resourceToShare} onChange={(event) => setResourceToShare(event.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-[#e8e4ed] bg-white px-2 text-[10px]"><option value="">Choose a saved resource or note</option>{detail.ownResources.map((resource) => <option key={resource.id} value={resource.id}>{resource.title} · {resource.resource_type}</option>)}</select><button type="button" disabled={!resourceToShare} onClick={async () => {const isNote = resourceToShare.startsWith("note:"); const result = await groupAction(isNote ? "share_note" : "share_resource", { resourceId: isNote ? resourceToShare.slice(5) : resourceToShare }); if (result) {setResourceToShare(""); setShowShareResources(false);}}} className="h-10 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-50">Share</button></div> : <p className="rounded-xl bg-[#f7f5ff] p-3 text-[10px] leading-4 text-[#8a8494]">Your saved resources and generated notes will appear here when available.</p>}<div className="space-y-2">{detail.resources.map((resource) => <div key={resource.id} className="flex items-center justify-between gap-2 rounded-lg bg-[#f7f6f9] px-3 py-2"><span className="min-w-0"><b className="block truncate text-[10px]">{resource.title}</b><span className="text-[8px] text-[#938d9b]">{resource.resourceType}</span></span><span className="flex shrink-0 items-center gap-3"><button type="button" onClick={() => {setShowShareResources(false); void openResource(resource);}} className="text-[9px] font-bold text-[#5d47bd]">Open</button>{resource.isMine && <button type="button" onClick={async () => {const result = await groupAction("unshare_resource", { resourceId: resource.id }); if (result) setShowShareResources(false);}} className="text-[9px] font-bold text-[#a44e48]">Unshare</button>}</span></div>)}{!detail.resources.length && <p className="text-[10px] text-[#8a8494]">No resources have been shared yet.</p>}</div></div></section></div>}
     {showMembers && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowMembers(false);}}><section role="dialog" aria-modal="true" aria-labelledby="group-members-title" className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><div><p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">{detail.group.name}</p><h2 id="group-members-title" className="mt-1 text-base font-extrabold">{detail.memberCount ?? detail.members.length} members</h2></div><button type="button" onClick={() => setShowMembers(false)} aria-label="Close members" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><ul className="max-h-[65vh] divide-y divide-[#f0edf4] overflow-y-auto px-5">{detail.members.map((member) => <li key={member.userId} className="flex items-center gap-3 py-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eeeaff] text-xs font-black text-[#7259e8]">{member.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><span className="min-w-0 flex-1"><b className="block truncate text-xs">{member.isSelf ? `${member.name} (You)` : member.name}</b><span className="mt-0.5 block text-[9px] capitalize text-[#8a8494]">{member.role} · Joined {formatDate(member.joinedAt)}</span></span>{detail.role === "owner" && !member.isSelf && member.role !== "owner" ? <span className="flex items-center gap-2"><select aria-label={`Role for ${member.name}`} value={member.role} onChange={(event) => void groupAction("set_member_role", { targetUserId: member.userId, newRole: event.target.value })} className="h-8 rounded-lg border border-[#e8e4ed] bg-white px-2 text-[9px] capitalize"><option value="member">Member</option><option value="moderator">Moderator</option></select><button type="button" onClick={() => {if (window.confirm(`Remove ${member.name} from this group?`)) void groupAction("remove_member", { targetUserId: member.userId });}} className="text-[9px] font-bold text-[#a44e48]">Remove</button></span> : <span className="rounded-full bg-[#f4f2f7] px-2.5 py-1 text-[8px] font-bold capitalize text-[#716a7c]">{member.role}</span>}</li>)}</ul><footer className="border-t border-[#eeeaf2] px-5 py-3 text-[9px] text-[#8a8494]">Only current group members can view this list.</footer></section></div>}
     {callSession && selectedId && <StudyCallDialog groupId={selectedId} session={callSession} onClose={() => setCallSession(null)} />}
-    {resourcePreview && <div className="fixed inset-0 z-[80] grid place-items-center bg-[#17132d]/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="shared-resource-title"><section className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[22px] bg-white p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-wide text-[#7259e8]">SHARED RESOURCE</p><h2 id="shared-resource-title" className="mt-1 text-base font-extrabold">{resourcePreview.title}</h2></div><button type="button" onClick={() => setResourcePreview(null)} aria-label="Close resource preview" className="grid size-8 place-items-center rounded-lg border border-[#e9e5ef]"><X className="size-4" /></button></div>{resourcePreview.downloadUrl && <a href={resourcePreview.downloadUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex h-9 items-center rounded-lg bg-[#7259e8] px-3 text-[10px] font-extrabold text-white">Open private file</a>}{resourcePreview.content ? <pre className="mt-4 max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#f7f6f9] p-4 text-[10px] leading-5">{typeof resourcePreview.content === "string" ? resourcePreview.content : JSON.stringify(resourcePreview.content, null, 2)}</pre> : !resourcePreview.downloadUrl && <p className="mt-4 text-xs text-[#8a8494]">This shared resource does not include a preview or file.</p>}</section></div>}
+    {resourcePreview && (
+      <div className="fixed inset-0 z-[120] grid place-items-center bg-[#17132d]/55 p-3 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="shared-resource-title">
+        <section className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[22px] bg-white shadow-2xl">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#eeeaf2] px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-wide text-[#7259e8]">Shared resource</p>
+              <h2 id="shared-resource-title" className="mt-1 truncate text-base font-extrabold">{resourcePreview.title}</h2>
+              {resourcePreview.resourceType && (
+                <p className="mt-0.5 text-[10px] font-bold capitalize text-[#8a8494]">{resourcePreview.resourceType.replace(/_/g, " ")}</p>
+              )}
+            </div>
+            <button type="button" onClick={() => setResourcePreview(null)} aria-label="Close resource preview" className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f4f2f7]">
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+            {resourcePreview.downloadUrl && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                <a
+                  href={resourcePreview.downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-10 items-center rounded-xl bg-[#7259e8] px-4 text-[11px] font-extrabold text-white"
+                >
+                  Open / download file
+                </a>
+              </div>
+            )}
+            {resourcePreview.downloadUrl && resourcePreview.mimeType?.startsWith("image/") && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={resourcePreview.downloadUrl} alt={resourcePreview.title} className="max-h-[55vh] w-full rounded-xl object-contain bg-[#f7f6f9]" />
+            )}
+            {resourcePreview.downloadUrl && resourcePreview.mimeType === "application/pdf" && (
+              <iframe title={resourcePreview.title} src={resourcePreview.downloadUrl} className="h-[55vh] w-full rounded-xl border border-[#eeeaf2] bg-white" />
+            )}
+            {resourcePreview.content ? (
+              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#f7f6f9] p-4 text-[11px] leading-5 text-[#2c2638]">
+                {typeof resourcePreview.content === "string"
+                  ? resourcePreview.content
+                  : formatResourceContent(resourcePreview.content)}
+              </pre>
+            ) : !resourcePreview.downloadUrl ? (
+              <p className="text-xs text-[#8a8494]">This shared resource does not include a preview or file.</p>
+            ) : null}
+          </div>
+        </section>
+      </div>
+    )}
     {notice && <div className="sr-only" aria-live="polite"><Check className="size-3" />{notice}</div>}
   </div>;
 }
