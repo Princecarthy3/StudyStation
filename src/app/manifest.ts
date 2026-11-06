@@ -3,6 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/app",
+    lang: "en",
+    dir: "ltr",
     name: "StudyStation — AI study companion",
     short_name: "StudyStation",
     description:
@@ -10,6 +12,9 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/app?source=pwa",
     scope: "/",
     display: "standalone",
+    launch_handler: {
+      client_mode: "navigate-existing",
+    },
     background_color: "#fbfaff",
     theme_color: "#7259e8",
     orientation: "any",

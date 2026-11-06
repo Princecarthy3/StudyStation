@@ -1,9 +1,31 @@
-const CACHE_NAME = "studystation-shell-v1";
-const APP_SHELL = ["/", "/app", "/offline.html", "/logo.png", "/icons/icon-192.png"];
+const CACHE_NAME = "studystation-public-v2";
+const STATIC_ASSETS = [
+  "/offline.html",
+  "/logo.png",
+  "/icons/apple-touch-icon.png",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
+
+function isSameOrigin(request) {
+  return new URL(request.url).origin === self.location.origin;
+}
+
+function isPublicStaticAsset(request) {
+  if (!isSameOrigin(request)) return false;
+
+  const url = new URL(request.url);
+  return (
+    url.pathname.startsWith("/_next/static/") ||
+    STATIC_ASSETS.includes(url.pathname)
+  );
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -17,26 +39,23 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).pathname.startsWith("/api/")) return;
+  if (event.request.method !== "GET" || !isSameOrigin(event.request)) return;
 
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-        .catch(async () => (await caches.match(event.request)) || caches.match("/offline.html"))
+        .catch(() => caches.match("/offline.html"))
     );
     return;
   }
+
+  if (!isPublicStaticAsset(event.request)) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)
         .then((response) => {
-          if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+          if (response.ok) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           }
