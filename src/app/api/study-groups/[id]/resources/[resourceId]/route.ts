@@ -80,7 +80,11 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   let content = resource.content;
-  if (content && JSON.stringify(content).length > 80_000) {
+  const isNoteType = resource.resource_type === "generated_notes"
+    || resource.resource_type === "note"
+    || resource.resource_type === "notes";
+  // Keep structured notes intact for the rendered note view; only truncate huge file-like blobs.
+  if (!isNoteType && content && JSON.stringify(content).length > 80_000) {
     content = { truncated: true, message: "Preview is too large. Open the private file instead." };
   }
 

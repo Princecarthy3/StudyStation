@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { StudyCallDialog } from "@/components/study-call-dialog";
+import { OrganizedNotesDisplay, type OrganizedNoteData, type OrganizedNoteContent } from "@/components/stage6-workspace";
 
 type Course = { id: string; title: string; code: string };
 type Group = {
@@ -76,6 +77,36 @@ function formatDate(value: string) {
     : new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
+
+
+function parseSharedGeneratedNote(title: string, content: unknown): OrganizedNoteData | null {
+  if (!content || typeof content !== "object") return null;
+  const raw = content as Record<string, unknown>;
+  const summary = typeof raw.summary === "string" ? raw.summary : "";
+  const body = raw.content;
+  // Already a full organized note payload
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const c = body as Record<string, unknown>;
+    // Nested { summary, content: OrganizedNoteContent } from share_note
+    const noteContent = (c.keyTerms || c.sections || c.takeaways || c.studyQuestions || c.actionChecklist
+      ? body
+      : (typeof c.content === "object" && c.content ? c.content : body)) as OrganizedNoteContent;
+    return {
+      title,
+      summary: summary || (typeof c.summary === "string" ? c.summary : ""),
+      content: noteContent,
+    };
+  }
+  // Flat content that is already OrganizedNoteContent-shaped
+  if (raw.keyTerms || raw.sections || raw.takeaways || raw.studyQuestions) {
+    return {
+      title,
+      summary,
+      content: raw as unknown as OrganizedNoteContent,
+    };
+  }
+  return null;
+}
 
 function formatResourceContent(content: unknown): string {
   if (!content || typeof content !== "object") return String(content ?? "");
@@ -738,15 +769,35 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
             {resourcePreview.downloadUrl && resourcePreview.mimeType === "application/pdf" && (
               <iframe title={resourcePreview.title} src={resourcePreview.downloadUrl} className="h-[55vh] w-full rounded-xl border border-[#eeeaf2] bg-white" />
             )}
-            {resourcePreview.content ? (
-              <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#f7f6f9] p-4 text-[11px] leading-5 text-[#2c2638]">
-                {typeof resourcePreview.content === "string"
-                  ? resourcePreview.content
-                  : formatResourceContent(resourcePreview.content)}
-              </pre>
-            ) : !resourcePreview.downloadUrl ? (
-              <p className="text-xs text-[#8a8494]">This shared resource does not include a preview or file.</p>
-            ) : null}
+            {(() => {
+              const isGeneratedNote =
+                resourcePreview.resourceType === "generated_notes"
+                || resourcePreview.resourceType === "note"
+                || resourcePreview.resourceType === "notes";
+              const organized = isGeneratedNote
+                ? parseSharedGeneratedNote(resourcePreview.title, resourcePreview.content)
+                : null;
+              if (organized) {
+                return (
+                  <div className="max-h-[65vh] overflow-y-auto pr-1">
+                    <OrganizedNotesDisplay note={organized} />
+                  </div>
+                );
+              }
+              if (resourcePreview.content) {
+                return (
+                  <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[#f7f6f9] p-4 text-[11px] leading-5 text-[#2c2638]">
+                    {typeof resourcePreview.content === "string"
+                      ? resourcePreview.content
+                      : formatResourceContent(resourcePreview.content)}
+                  </pre>
+                );
+              }
+              if (!resourcePreview.downloadUrl) {
+                return <p className="text-xs text-[#8a8494]">This shared resource does not include a preview or file.</p>;
+              }
+              return null;
+            })()}
           </div>
         </section>
       </div>
