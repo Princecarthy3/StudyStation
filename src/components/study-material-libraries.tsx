@@ -91,14 +91,14 @@ export function GeneratedFlashcardsLibrary({ onOpenStudyLab }: { onOpenStudyLab:
 
               {selected && (
                 <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-                  <div className="rounded-[24px] border border-[#e9e5ef] bg-white p-5 sm:p-7">
+                  <div className="flashcard-stage rounded-[24px] border border-[#e9e5ef] bg-white p-5 sm:p-7">
                     <div className="flex items-center justify-between gap-3">
                       <span className="rounded-full bg-[#eeeaff] px-3 py-1 text-[9px] font-black text-[#7259e8]">CARD {cardIndex + 1} OF {selected.output.cards.length}</span>
                       <span className="text-[10px] font-bold text-[#868093]">{masteredCount} marked as known</span>
                     </div>
-                    <button type="button" onClick={() => setFlipped((value) => !value)} className="mt-5 flex min-h-[210px] w-full flex-col items-center justify-center rounded-2xl border border-[#e5ddfa] bg-gradient-to-tr from-[#faf9fd] to-[#f4f0ff] p-6 text-center transition hover:shadow-md">
-                      <span className="rounded-full bg-white px-3 py-1 text-[9px] font-black text-[#7259e8] shadow-sm">{flipped ? "ANSWER" : "QUESTION · TAP TO REVEAL"}</span>
-                      <p className="mt-5 text-base font-extrabold leading-7 text-[#17132d]">{flipped ? selected.output.cards[cardIndex].back : selected.output.cards[cardIndex].front}</p>
+                    <button type="button" onClick={() => setFlipped((value) => !value)} className="flashcard-face mt-5 flex min-h-[210px] w-full flex-col items-center justify-center rounded-[22px] border border-[#e5ddfa] p-6 text-center transition hover:shadow-md">
+                      <span className="flashcard-chip rounded-full px-3 py-1 text-[9px] font-black shadow-sm">{flipped ? "ANSWER" : "QUESTION · TAP TO REVEAL"}</span>
+                      <p className="flashcard-text mt-5 text-base font-extrabold leading-7">{flipped ? selected.output.cards[cardIndex].back : selected.output.cards[cardIndex].front}</p>
                     </button>
                     <div className="mt-4 flex items-center justify-between gap-2">
                       <button type="button" onClick={() => moveCard(-1)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#e9e5ef] px-3 text-[10px] font-bold"><ChevronLeft className="size-4" /> Previous</button>
