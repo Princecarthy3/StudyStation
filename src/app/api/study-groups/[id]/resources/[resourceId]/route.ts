@@ -7,6 +7,15 @@ export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ id: string; resourceId: string }> };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+type ResourceRow = {
+  id: string;
+  title: string;
+  resource_type: string;
+  content: unknown;
+  storage_path: string | null;
+  metadata?: unknown;
+};
+
 export async function GET(_request: Request, context: RouteContext) {
   const { id, resourceId } = await context.params;
   if (!uuidPattern.test(id) || !uuidPattern.test(resourceId)) {
@@ -22,7 +31,6 @@ export async function GET(_request: Request, context: RouteContext) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: "Sign in to open this resource." }, { status: 401 });
 
-  // Membership check first (explicit, not only via RLS)
   const { data: membership, error: membershipError } = await supabase
     .from("group_members")
     .select("role")
@@ -36,15 +44,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Join this group to open shared resources." }, { status: 403 });
   }
 
-  // Load resource as member (RLS) — fall back to admin if row is blocked but membership is valid
-  let resource: {
-    id: string;
-    title: string;
-    resource_type: string;
-    content: unknown;
-    storage_path: string | null;
-    metadata?: unknown;
-  } | null = null;
+  let resource: ResourceRow | null = null;
 
   const { data: row, error } = await supabase
     .from("resources")
@@ -57,7 +57,7 @@ export async function GET(_request: Request, context: RouteContext) {
   if (error) {
     return NextResponse.json({ error: "Shared resource could not be loaded." }, { status: 500 });
   }
-  resource = row;
+  resource = row as ResourceRow | null;
 
   if (!resource) {
     try {
@@ -69,7 +69,7 @@ export async function GET(_request: Request, context: RouteContext) {
         .eq("shared_group_id", id)
         .eq("visibility", "group")
         .maybeSingle();
-      resource = adminRow;
+      resource = adminRow as ResourceRow | null;
     } catch {
       // service role unavailable
     }
@@ -81,32 +81,23 @@ export async function GET(_request: Request, context: RouteContext) {
 
   let content = resource.content;
   if (content && JSON.stringify(content).length > 80_000) {
-    // Still allow download; omit huge inline preview
     content = { truncated: true, message: "Preview is too large. Open the private file instead." };
   }
 
   let downloadUrl: string | null = null;
   if (resource.storage_path) {
-    // Prefer service-role signed URL so group members are not blocked by storage RLS edge cases
-    let signed: { signedUrl: string } | null = null;
     let lastError: string | undefined;
-
-    async function sign(client: typeof supabase, withDownload: boolean) {
-      return client.storage
-        .from("study-resources")
-        .createSignedUrl(
-          resource.storage_path!,
-          60 * 15,
-          withDownload ? { download: resource.title } : undefined,
-        );
-    }
+    const path = resource.storage_path;
+    const title = resource.title;
 
     try {
       const admin = createAdminClient();
       for (const withDownload of [true, false]) {
-        const { data, error: storageError } = await sign(admin as typeof supabase, withDownload);
+        const { data, error: storageError } = await admin.storage
+          .from("study-resources")
+          .createSignedUrl(path, 60 * 15, withDownload ? { download: title } : undefined);
         if (!storageError && data?.signedUrl) {
-          signed = data;
+          downloadUrl = data.signedUrl;
           break;
         }
         lastError = storageError?.message || lastError;
@@ -115,26 +106,25 @@ export async function GET(_request: Request, context: RouteContext) {
       lastError = e instanceof Error ? e.message : "admin unavailable";
     }
 
-    if (!signed) {
+    if (!downloadUrl) {
       for (const withDownload of [true, false]) {
-        const { data, error: storageError } = await sign(supabase, withDownload);
+        const { data, error: storageError } = await supabase.storage
+          .from("study-resources")
+          .createSignedUrl(path, 60 * 15, withDownload ? { download: title } : undefined);
         if (!storageError && data?.signedUrl) {
-          signed = data;
+          downloadUrl = data.signedUrl;
           break;
         }
         lastError = storageError?.message || lastError;
       }
     }
 
-    if (!signed) {
+    if (!downloadUrl) {
       console.error("Shared resource signed URL failed", { resourceId, lastError });
       return NextResponse.json({
         error: "This shared file could not be opened. Ask the owner to re-share it, or try again shortly.",
-        detail: lastError,
       }, { status: 503 });
     }
-
-    downloadUrl = signed.signedUrl;
   }
 
   const meta = resource.metadata && typeof resource.metadata === "object"
