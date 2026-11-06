@@ -108,10 +108,15 @@ export async function POST(request: Request) {
   if (!claimedLecture) return NextResponse.json({ error: "This lecture has already changed. Refresh and try again." }, { status: 409 });
 
   try {
-    const { data: object, error: downloadError } = await supabase.storage
+    // Prefer service-role download so transcription is not blocked by storage RLS edge cases.
+    const storageClient = admin ?? supabase;
+    const { data: object, error: downloadError } = await storageClient.storage
       .from("lecture-media")
       .download(lecture.storage_path);
-    if (downloadError || !object) throw new Error("The uploaded file could not be read.");
+    if (downloadError || !object) {
+      const detail = downloadError?.message ? ` (${downloadError.message})` : "";
+      throw new Error(`The uploaded file could not be read${detail}. Re-upload the recording if this continues.`);
+    }
     if (object.size < 1 || object.size > MAX_FILE_SIZE) throw new Error("The uploaded file is empty or exceeds the 150 MB limit.");
 
     const bytes = Buffer.from(await object.arrayBuffer());

@@ -584,11 +584,21 @@ export function AppShell({
     backgroundRecordingRef.current?.stop();
     setIsWakeLockActive(false);
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch {}
       recognitionRef.current = null;
     }
-    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
-    if (mediaRecorderRef.current?.state === "paused") mediaRecorderRef.current.stop();
+    const recorder = mediaRecorderRef.current;
+    if (recorder && (recorder.state === "recording" || recorder.state === "paused")) {
+      try {
+        // Flush the final timeslice so iOS/Safari does not drop the last seconds.
+        if (recorder.state === "recording" && typeof recorder.requestData === "function") {
+          recorder.requestData();
+        }
+      } catch {}
+      try {
+        recorder.stop();
+      } catch {}
+    }
   }
 
   function resetRecording() {
@@ -660,13 +670,23 @@ export function AppShell({
       }
 
       const supabase = createSupabaseBrowserClient();
-      const { error: uploadError } = await supabase.storage
+      if (!file.size) {
+        throw new Error("The recording file is empty. Please record again.");
+      }
+      const uploadContentType = file.type || "application/octet-stream";
+      const { error: uploadError, data: uploadData } = await supabase.storage
         .from(created.bucket)
-        .uploadToSignedUrl(created.storagePath, created.uploadToken, file, { contentType: file.type, upsert: false });
+        .uploadToSignedUrl(created.storagePath, created.uploadToken, file, {
+          contentType: uploadContentType,
+          upsert: false,
+        });
       if (uploadError) {
         const cleanupResponse = await fetch(`/api/lectures/${created.lectureId}`, { method: "DELETE" });
         if (!cleanupResponse.ok) router.refresh();
-        throw new Error("The file could not be uploaded to private storage. Check your connection and try again.");
+        throw new Error(uploadError.message || "The file could not be uploaded to private storage. Check your connection and try again.");
+      }
+      if (!uploadData?.path && !uploadData?.fullPath) {
+        // Some supabase-js versions return empty data on success; only fail when error is set.
       }
 
       const isDoc = /\.(pdf|docx|doc|pptx|ppt|txt|md|rtf)$/i.test(file.name);
@@ -751,8 +771,31 @@ export function AppShell({
   }
 
   async function processRecording(title?: string) {
-    if (!recordedBlob) return;
-    const extension = recordedBlob.type.includes("mp4") ? "m4a" : "webm";
+    if (!recordedBlob) {
+      showToast("No recording found. Record again, then upload.", "error");
+      return;
+    }
+    if (recordedBlob.size < 256) {
+      showToast("That recording looks empty. Record a little longer, then try again.", "error");
+      return;
+    }
+    // Normalize browser MIME types so storage + transcription agree on the format.
+    const rawType = (recordedBlob.type || "").toLowerCase();
+    let mimeType = "audio/webm";
+    let extension = "webm";
+    if (rawType.includes("mp4") || rawType.includes("aac") || rawType.includes("m4a")) {
+      mimeType = "audio/mp4";
+      extension = "m4a";
+    } else if (rawType.includes("wav")) {
+      mimeType = "audio/wav";
+      extension = "wav";
+    } else if (rawType.includes("mpeg") || rawType.includes("mp3")) {
+      mimeType = "audio/mpeg";
+      extension = "mp3";
+    } else if (rawType.includes("webm")) {
+      mimeType = "audio/webm";
+      extension = "webm";
+    }
     const course = courseValue ? courseMap.get(courseValue) : null;
     const stamp = new Intl.DateTimeFormat(undefined, {
       month: "short",
@@ -763,8 +806,9 @@ export function AppShell({
     const fallbackTitle = course
       ? `${course.code} lecture · ${stamp}`
       : `Lecture · ${stamp}`;
+    const file = new File([recordedBlob], `live-recording.${extension}`, { type: mimeType });
     await submitLecture(
-      new File([recordedBlob], `live-recording.${extension}`, { type: recordedBlob.type }),
+      file,
       title?.trim() || lectureTitle.trim() || fallbackTitle,
       "recording",
       recordingSeconds

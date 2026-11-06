@@ -79,10 +79,37 @@ export async function POST(request: Request) {
 
   const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
   const isDocumentExt = documentExtensions.has(extension);
-  let fileType = supportedFiles[mimeType];
+  let resolvedMime = mimeType;
+  // Infer MIME when the browser leaves it blank (common on iOS MediaRecorder).
+  if (!resolvedMime) {
+    if (extension === "webm") resolvedMime = "audio/webm";
+    else if (extension === "m4a" || extension === "mp4") resolvedMime = "audio/mp4";
+    else if (extension === "mp3") resolvedMime = "audio/mpeg";
+    else if (extension === "wav") resolvedMime = "audio/wav";
+    else if (extension === "pdf") resolvedMime = "application/pdf";
+  }
+  let fileType = supportedFiles[resolvedMime];
 
   if (!fileType && isDocumentExt) {
     fileType = { sourceType: "document", extensions: [extension] };
+  }
+  // Allow audio/mp4 with .m4a and video/webm with .webm from in-app recordings.
+  if (!fileType && extension === "m4a") {
+    fileType = supportedFiles["audio/mp4"] ?? supportedFiles["audio/x-m4a"];
+    resolvedMime = resolvedMime || "audio/mp4";
+  }
+  if (!fileType && extension === "webm") {
+    fileType = supportedFiles["audio/webm"] ?? supportedFiles["video/webm"];
+    resolvedMime = resolvedMime || "audio/webm";
+  }
+
+  if (!fileType || !fileType.extensions.includes(extension)) {
+    // Last chance: extension-only match for known audio containers
+    const byExt = Object.entries(supportedFiles).find(([, meta]) => meta.extensions.includes(extension));
+    if (byExt) {
+      fileType = byExt[1];
+      resolvedMime = resolvedMime || byExt[0];
+    }
   }
 
   if (!fileType || !fileType.extensions.includes(extension)) {
@@ -93,7 +120,7 @@ export async function POST(request: Request) {
   if (body.sourceType !== undefined && body.sourceType !== "recording" && body.sourceType !== "document") {
     return NextResponse.json({ error: "The lecture source type is not supported." }, { status: 400 });
   }
-  if (body.sourceType === "recording" && fileType.sourceType !== "audio") {
+  if (body.sourceType === "recording" && fileType.sourceType !== "audio" && fileType.sourceType !== "video") {
     return NextResponse.json({ error: "Live recordings must be uploaded as supported audio files." }, { status: 415 });
   }
   if (courseId && !uuidPattern.test(courseId)) {
@@ -137,7 +164,7 @@ export async function POST(request: Request) {
     title,
     source_type: body.sourceType === "recording" ? "recording" : fileType.sourceType,
     storage_path: storagePath,
-    mime_type: mimeType,
+    mime_type: resolvedMime || mimeType,
     status: "uploaded",
     duration_seconds: durationSeconds,
   });

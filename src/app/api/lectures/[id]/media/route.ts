@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
@@ -80,12 +81,20 @@ export async function GET(request: Request, context: RouteContext) {
     }
   }
 
-  const { data: object, error: downloadError } = await supabase.storage
+  let storage = supabase;
+  try {
+    storage = createAdminClient();
+  } catch {
+    // Fall back to the user-scoped client when service role is unavailable.
+  }
+
+  const { data: object, error: downloadError } = await storage.storage
     .from("lecture-media")
     .download(lecture.storage_path);
 
   if (downloadError || !object) {
-    return NextResponse.json({ error: "Media file could not be read." }, { status: 500 });
+    const detail = downloadError?.message ? ` (${downloadError.message})` : "";
+    return NextResponse.json({ error: `Media file could not be read${detail}.` }, { status: 500 });
   }
 
   const buffer = Buffer.from(await object.arrayBuffer());
