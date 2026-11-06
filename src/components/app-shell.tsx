@@ -1466,32 +1466,37 @@ function FunctionalNotesView({
         </div>
       </div>
 
-      {/* Dynamic Course Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+      {/* Dynamic Course Filters — shrink-0 so labels never compress/truncate on mobile */}
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
+          type="button"
           onClick={() => setSelectedCourseFilter("all")}
-          className={`whitespace-nowrap rounded-xl px-4 py-2 text-[11px] font-extrabold transition ${
+          className={`shrink-0 whitespace-nowrap rounded-xl px-3.5 py-2 text-[11px] font-extrabold transition sm:px-4 ${
             selectedCourseFilter === "all"
               ? "bg-[#17132d] text-white shadow-sm"
               : "border border-[#e5e1ea] bg-white text-[#736d7b] hover:bg-[#faf9fe]"
           }`}
         >
-          All courses ({lectures.length})
+          All courses
+          <span className="ml-1 tabular-nums opacity-80">({lectures.length})</span>
         </button>
         {courses.map((course) => {
           const count = lectures.filter((l) => l.courseId === course.id).length;
           return (
             <button
+              type="button"
               key={course.id}
               onClick={() => setSelectedCourseFilter(course.id)}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-[11px] font-extrabold transition ${
+              title={`${course.code} · ${course.title}`}
+              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-[11px] font-extrabold transition sm:px-4 ${
                 selectedCourseFilter === course.id
                   ? "bg-[#7259e8] text-white shadow-sm"
                   : "border border-[#e5e1ea] bg-white text-[#736d7b] hover:bg-[#faf9fe]"
               }`}
             >
-              <span className="size-2 rounded-full" style={{ backgroundColor: course.color }} />
-              {course.code} ({count})
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: course.color }} />
+              <span className="max-w-[9.5rem] truncate sm:max-w-none">{course.code}</span>
+              <span className="tabular-nums opacity-80">({count})</span>
             </button>
           );
         })}
@@ -1542,8 +1547,9 @@ function FunctionalNotesView({
               >
                 <div className={`flex items-center justify-between ${layout === "list" ? "sm:w-48 sm:shrink-0" : ""}`}>
                   <span
-                    className="rounded-lg px-2.5 py-1 text-[9px] font-black text-white"
+                    className="max-w-[8.5rem] truncate rounded-lg px-2.5 py-1 text-[9px] font-black text-white"
                     style={{ backgroundColor: course?.color || "#7259e8" }}
+                    title={course ? `${course.code} · ${course.title}` : "General"}
                   >
                     {course?.code || "GENERAL"}
                   </span>
