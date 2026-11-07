@@ -2383,13 +2383,13 @@ function FormattedAssistantMessage({ content }: { content: string }) {
   };
 
   return (
-    <div className="space-y-2 text-[12px] leading-relaxed text-[#2c2638] [&_strong]:text-inherit">
+    <div className="space-y-2.5 text-[15px] leading-relaxed text-[#2c2638] sm:text-[14px] [&_strong]:text-inherit">
       {blocks.map((block, idx) => {
         if (block.type === "heading") {
           return (
             <div
               key={idx}
-              className="mt-3.5 first:mt-0 font-extrabold text-[#7259e8] text-[11px] tracking-wide uppercase"
+              className="mt-3.5 first:mt-0 text-[13px] font-extrabold uppercase tracking-wide text-[#7259e8] sm:text-[12px]"
             >
               {block.text}
             </div>
@@ -2446,6 +2446,15 @@ function FunctionalAssistantView({
   ask: (question?: string) => void;
 }) {
   const readyLectures = useMemo(() => lectures.filter((l) => l.status === "ready"), [lectures]);
+  const [showFocusPicker, setShowFocusPicker] = useState(false);
+  const courseMap = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
+  const selectedLabel = useMemo(() => {
+    if (selectedLectureId === "all") return "All materials";
+    const lecture = readyLectures.find((l) => l.id === selectedLectureId);
+    if (!lecture) return "All materials";
+    const course = lecture.courseId ? courseMap.get(lecture.courseId) : null;
+    return course ? `${course.code} · ${lecture.title}` : lecture.title;
+  }, [selectedLectureId, readyLectures, courseMap]);
 
   return (
     <div className="fade-up mx-auto max-w-[1040px] space-y-6">
@@ -2468,7 +2477,7 @@ function FunctionalAssistantView({
             <select
               value={selectedLectureId}
               onChange={(e) => setSelectedLectureId(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-[#ded8ea] bg-white px-2.5 py-2 text-[11px] font-bold text-[#17132d] outline-none"
+              className="mt-2 w-full rounded-xl border border-[#ded8ea] bg-white px-2.5 py-2.5 text-[13px] font-bold text-[#17132d] outline-none"
             >
               <option value="all">All course materials</option>
               {readyLectures.map((l) => (
@@ -2511,7 +2520,7 @@ function FunctionalAssistantView({
                   </div>
                 )}
                 <div
-                  className={`max-w-[82%] rounded-2xl px-4 py-3 text-[12px] leading-relaxed ${
+                  className={`max-w-[90%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed sm:max-w-[82%] sm:text-[14px] ${
                     message.role === "user"
                       ? "rounded-br-md bg-[#17132d] text-white"
                       : "assistant-bubble rounded-bl-md bg-[#f4f1fb] text-[#2c2638] border border-[#e8e4f1]"
@@ -2558,22 +2567,38 @@ function FunctionalAssistantView({
           </div>
 
           {/* Chat Inputs */}
-          <div className="border-t border-[#ece8f0] p-3 sm:p-4 bg-white">
-            <div className="mb-2.5 flex gap-2 overflow-x-auto hide-scrollbar">
+          <div className="border-t border-[#ece8f0] bg-white p-3 sm:p-4">
+            <div className="mb-2.5 flex gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {[
-                "Summarize main concepts from my lectures",
-                "Explain like I'm new to this subject",
-                "Generate 3 practice recall questions",
-              ].map((q) => (
+                { label: "Summarize lectures", prompt: "Summarize the main concepts from my lectures" },
+                { label: "Explain simply", prompt: "Explain this like I'm new to the subject" },
+                { label: "Practice questions", prompt: "Generate 3 practice recall questions" },
+              ].map((item) => (
                 <button
-                  key={q}
-                  onClick={() => ask(q)}
-                  className="whitespace-nowrap rounded-lg border border-[#e4e0e9] bg-[#faf9fd] px-3 py-1.5 text-[10px] font-bold text-[#6a6378] hover:border-[#7259e8] hover:text-[#7259e8] transition"
+                  key={item.label}
+                  type="button"
+                  onClick={() => ask(item.prompt)}
+                  className="shrink-0 rounded-full border border-[#e4e0e9] bg-[#faf9fd] px-3.5 py-2 text-[13px] font-semibold text-[#4a4458] transition hover:border-[#7259e8] hover:text-[#7259e8]"
                 >
-                  {q}
+                  {item.label}
                 </button>
               ))}
             </div>
+
+            {selectedLectureId !== "all" && (
+              <div className="mb-2 flex items-center gap-2">
+                <span className="min-w-0 truncate rounded-full bg-[#eeeaff] px-3 py-1 text-[12px] font-bold text-[#5b47bd]">
+                  Focus: {selectedLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLectureId("all")}
+                  className="shrink-0 text-[12px] font-bold text-[#8a8494]"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
 
             <form
               onSubmit={(e) => {
@@ -2582,6 +2607,14 @@ function FunctionalAssistantView({
               }}
               className="flex items-end gap-2 rounded-2xl border border-[#ded8e8] bg-[#faf9fd] p-2 focus-within:border-[#7259e8] focus-within:bg-white"
             >
+              <button
+                type="button"
+                onClick={() => setShowFocusPicker(true)}
+                aria-label="Choose course or lecture focus"
+                className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-[#eeeaff] text-[#7259e8] transition hover:bg-[#e4dcff]"
+              >
+                <Plus className="size-5" />
+              </button>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -2592,18 +2625,111 @@ function FunctionalAssistantView({
                   }
                 }}
                 rows={1}
-                placeholder="Ask StudyStation anything about your coursework…"
-                className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2.5 py-2 text-[12px] outline-none placeholder:text-[#aaa4b1]"
+                placeholder="Ask about your coursework…"
+                className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-1.5 py-2.5 text-[15px] leading-snug outline-none placeholder:text-[#aaa4b1] sm:text-[14px]"
               />
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white disabled:opacity-40 hover:bg-[#6247df] transition"
+                className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white transition hover:bg-[#6247df] disabled:opacity-40"
               >
                 <Send className="size-4" />
               </button>
             </form>
           </div>
+
+          {showFocusPicker && (
+            <div
+              className="fixed inset-0 z-[120] flex items-end justify-center bg-[#17132d]/45 p-3 backdrop-blur-sm sm:items-center"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) setShowFocusPicker(false);
+              }}
+            >
+              <section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="focus-picker-title"
+                className="ios-glass-sheet max-h-[75vh] w-full max-w-md overflow-hidden rounded-[24px] bg-white shadow-2xl"
+              >
+                <header className="flex items-center justify-between border-b border-[#eeeaf2] px-4 py-3">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[.12em] text-[#7259e8]">Focus</p>
+                    <h2 id="focus-picker-title" className="text-[16px] font-extrabold text-[#17132d]">Course or lecture</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowFocusPicker(false)}
+                    aria-label="Close"
+                    className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </header>
+                <div className="max-h-[60vh] space-y-1 overflow-y-auto p-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedLectureId("all");
+                      setShowFocusPicker(false);
+                    }}
+                    className={`flex w-full items-center rounded-xl px-3 py-3 text-left text-[15px] font-bold transition ${
+                      selectedLectureId === "all" ? "bg-[#eeeaff] text-[#5b47bd]" : "text-[#17132d] hover:bg-[#faf9fd]"
+                    }`}
+                  >
+                    All course materials
+                  </button>
+                  {courses.map((course) => {
+                    const courseLectures = readyLectures.filter((l) => l.courseId === course.id);
+                    if (courseLectures.length === 0) return null;
+                    return (
+                      <div key={course.id} className="pt-2">
+                        <p className="px-3 pb-1 text-[11px] font-black uppercase tracking-wide text-[#8a8494]">
+                          {course.code}
+                        </p>
+                        {courseLectures.map((lecture) => (
+                          <button
+                            key={lecture.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedLectureId(lecture.id);
+                              setShowFocusPicker(false);
+                            }}
+                            className={`flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left transition ${
+                              selectedLectureId === lecture.id ? "bg-[#eeeaff] text-[#5b47bd]" : "text-[#17132d] hover:bg-[#faf9fd]"
+                            }`}
+                          >
+                            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: course.color }} />
+                            <span className="min-w-0 truncate text-[14px] font-semibold">{lecture.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                  {readyLectures.filter((l) => !l.courseId).length > 0 && (
+                    <div className="pt-2">
+                      <p className="px-3 pb-1 text-[11px] font-black uppercase tracking-wide text-[#8a8494]">Unassigned</p>
+                      {readyLectures.filter((l) => !l.courseId).map((lecture) => (
+                        <button
+                          key={lecture.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedLectureId(lecture.id);
+                            setShowFocusPicker(false);
+                          }}
+                          className={`flex w-full items-center rounded-xl px-3 py-3 text-left text-[14px] font-semibold transition ${
+                            selectedLectureId === lecture.id ? "bg-[#eeeaff] text-[#5b47bd]" : "text-[#17132d] hover:bg-[#faf9fd]"
+                          }`}
+                        >
+                          {lecture.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
         </div>
       </div>
     </div>
