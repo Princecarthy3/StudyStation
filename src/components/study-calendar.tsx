@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Bell,
   ArrowRight,
   CalendarDays,
   Check,
@@ -148,6 +149,7 @@ export function StudyCalendar({
   const todayKey = dateKey(data.asOf, timezone);
   const [anchorKey, setAnchorKey] = useState(todayKey);
   const [calendarMode, setCalendarMode] = useState<"month" | "week">("month");
+  const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
   const [eventEditor, setEventEditor] = useState<PlannerEvent | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -229,6 +231,15 @@ export function StudyCalendar({
     values.forEach((items) => items.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)));
     return values;
   }, [data.events, data.groupSessions, data.tasks, timezone]);
+
+  useEffect(() => {
+    if (calendarMode !== "week") return;
+    if (!visibleDays.includes(selectedDayKey)) {
+      const preferred = visibleDays.includes(todayKey) ? todayKey : visibleDays[0];
+      if (preferred) setSelectedDayKey(preferred);
+    }
+  }, [calendarMode, visibleDays, selectedDayKey, todayKey]);
+
 
   function moveCalendar(direction: number) {
     if (calendarMode === "week") setAnchorKey(addDays(anchorKey, 7 * direction));
@@ -345,6 +356,7 @@ export function StudyCalendar({
         setImportNotice(result.success ?? "Calendar imported.");
         setImportDraft([]);
         setImportOpen(false);
+        setCalendarMode("week");
         setStatusMessage(result.success ?? "Calendar imported.");
         router.refresh();
       }
@@ -464,27 +476,216 @@ export function StudyCalendar({
         <div className="flex items-center gap-2"><button type="button" onClick={() => moveCalendar(-1)} aria-label="Previous calendar range" className="grid size-8 place-items-center rounded-lg border border-[#e6e2ea]"><ChevronLeft className="size-4" /></button><button type="button" onClick={() => setAnchorKey(todayKey)} className="h-8 rounded-lg border border-[#e6e2ea] px-2.5 text-[9px] font-bold">Today</button><button type="button" onClick={() => moveCalendar(1)} aria-label="Next calendar range" className="grid size-8 place-items-center rounded-lg border border-[#e6e2ea]"><ChevronRight className="size-4" /></button><h2 className="ml-1 text-sm font-extrabold">{title}</h2></div>
         <div className="flex items-center gap-2"><div className="flex rounded-lg bg-[#f4f2f7] p-1">{(["month", "week"] as const).map((mode) => <button key={mode} type="button" onClick={() => setCalendarMode(mode)} aria-pressed={calendarMode === mode} className={`rounded-md px-3 py-1.5 text-[9px] font-extrabold capitalize ${calendarMode === mode ? "bg-white text-[#7259e8] shadow-sm" : "text-[#8e8895]"}`}>{mode}</button>)}</div><button type="button" onClick={() => setEventEditor(defaultEvent(anchorKey))} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#f1efff] px-3 text-[9px] font-extrabold text-[#5e47c4]"><Plus className="size-3" /> Add item</button></div>
       </div>
-      <div className="overflow-x-auto">
-        <div className={`min-w-[720px] ${calendarMode === "week" ? "pb-3" : ""}`}>
-          <div className="grid grid-cols-7 border-b border-[#ece9f0]">{weekdayLabels.map((day) => <div key={day} className="py-3 text-center text-[8px] font-black uppercase tracking-wide text-[#aaa4b1]">{day}</div>)}</div>
-          <div className={calendarMode === "month" ? "grid grid-cols-7" : "grid min-h-[430px] grid-cols-7 divide-x divide-[#f0edf3]"}>
+      {calendarMode === "week" ? (
+        <div className="px-3 pb-4 pt-1 sm:px-5">
+          <div className="flex gap-1 overflow-x-auto border-b border-[#ece9f0] pb-0 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {visibleDays.map((day) => {
-              const items = eventsByDay.get(day) ?? [];
-              const outsideMonth = calendarMode === "month" && !day.startsWith(monthKey);
-              const dayNumber = Number(day.slice(-2));
-              const isToday = day === todayKey;
-              const shown = calendarMode === "month" ? items.slice(0, 3) : items;
-              return <div key={day} className={`min-h-[118px] border-b border-r border-[#f0edf3] p-1.5 sm:min-h-[140px] sm:p-2 ${outsideMonth ? "bg-[#fbfaff] text-[#bbb5c2]" : ""} ${calendarMode === "week" ? "min-w-0" : ""}`}>
-                <div className="mb-1 flex items-center justify-between"><button type="button" onClick={() => setEventEditor(defaultEvent(day))} className={`grid size-7 place-items-center rounded-full text-[9px] font-extrabold ${isToday ? "bg-[#7259e8] text-white" : outsideMonth ? "text-[#aaa4b1]" : "text-[#514b5d]"}`}>{dayNumber}</button><button type="button" onClick={() => setEventEditor(defaultEvent(day))} aria-label={`Add calendar item on ${day}`} className="grid size-6 place-items-center rounded-md text-[#aaa4b1] hover:bg-[#f3f0ff] hover:text-[#7259e8]"><Plus className="size-3" /></button></div>
-                <div className="space-y-1">{shown.map((item) => {
-                  const color = item.kind === "task" ? item.type === "completed" ? "#36a079" : "#d76d68" : item.kind === "group" ? "#36a079" : eventColors[item.type] ?? "#7259e8";
-                  return <button key={item.id} type="button" onClick={() => item.item && setEventEditor(item.item)} title={`${formatDate(item.startsAt, timezone, { hour: "numeric", minute: "2-digit" })} ${item.title}`} className="block w-full truncate rounded-md px-1.5 py-1 text-left text-[7px] font-bold leading-3 sm:text-[8px]" style={{ color, backgroundColor: `${color}16`, borderLeft: `2px solid ${color}` }}><span className="mr-1">{formatDate(item.startsAt, timezone, { hour: "numeric", minute: "2-digit" })}</span>{item.title}</button>;
-                })}{calendarMode === "month" && items.length > shown.length && <button type="button" onClick={() => {setAnchorKey(day); setCalendarMode("week");}} className="px-1 text-[7px] font-bold text-[#7259e8]">+{items.length - shown.length} more</button>}</div>
-              </div>;
+              const label = formatDate(`${day}T12:00:00Z`, timezone, { weekday: "long" });
+              const active = day === selectedDayKey;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setSelectedDayKey(day)}
+                  className={`relative shrink-0 px-3.5 py-3 text-[13px] font-bold transition sm:text-[14px] ${
+                    active ? "text-[#17132d]" : "text-[#8a8494]"
+                  }`}
+                >
+                  {label}
+                  {active && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-[#7259e8]" />}
+                </button>
+              );
             })}
           </div>
+          {(() => {
+            const dayItems = eventsByDay.get(selectedDayKey) ?? [];
+            const buckets: Record<"morning" | "afternoon" | "evening", typeof dayItems> = {
+              morning: [],
+              afternoon: [],
+              evening: [],
+            };
+            dayItems.forEach((item) => {
+              const hour = Number(
+                new Intl.DateTimeFormat("en-GB", {
+                  timeZone: timezone || "UTC",
+                  hour: "2-digit",
+                  hourCycle: "h23",
+                }).format(new Date(item.startsAt)),
+              );
+              if (hour < 12) buckets.morning.push(item);
+              else if (hour < 17) buckets.afternoon.push(item);
+              else buckets.evening.push(item);
+            });
+            const sections: Array<{ key: keyof typeof buckets; label: string; tone: string }> = [
+              { key: "morning", label: "Morning", tone: "bg-[#3b2d7a] text-white" },
+              { key: "afternoon", label: "Afternoon", tone: "bg-[#6b5740] text-white" },
+              { key: "evening", label: "Evening", tone: "bg-[#2f4a5c] text-white" },
+            ];
+            if (!dayItems.length) {
+              return (
+                <div className="px-2 py-10 text-center">
+                  <p className="text-[15px] font-extrabold text-[#373145]">No classes this day</p>
+                  <p className="mt-1 text-[13px] text-[#8a8494]">Import a school timetable or add an event.</p>
+                  <button
+                    type="button"
+                    onClick={() => setEventEditor(defaultEvent(selectedDayKey))}
+                    className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-4 text-[13px] font-extrabold text-white"
+                  >
+                    <Plus className="size-4" /> Add event
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div className="mt-4 space-y-5">
+                {sections.map((section) => {
+                  const items = buckets[section.key];
+                  if (!items.length) return null;
+                  return (
+                    <div key={section.key}>
+                      <span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-extrabold ${section.tone}`}>
+                        {items.length} {section.label}
+                      </span>
+                      <div className="relative mt-3 space-y-4 border-l-2 border-[#e6e1ef] pl-4">
+                        {items.map((item) => {
+                          const color =
+                            item.kind === "task"
+                              ? item.type === "completed"
+                                ? "#36a079"
+                                : "#d76d68"
+                              : item.kind === "group"
+                                ? "#36a079"
+                                : eventColors[item.type] ?? "#7259e8";
+                          const timeRange = `${formatDate(item.startsAt, timezone, { hour: "numeric", minute: "2-digit" })} – ${formatDate(item.endsAt, timezone, { hour: "numeric", minute: "2-digit" })}`;
+                          const location = item.item?.location;
+                          const courseLabel = item.item?.courseId
+                            ? courseLabels.get(item.item.courseId)
+                            : null;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => item.item && setEventEditor(item.item)}
+                              className="flex w-full items-start justify-between gap-3 text-left"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-[15px] font-extrabold leading-snug text-[#17132d] sm:text-[16px]">
+                                  {item.title}
+                                </p>
+                                <p className="mt-1 text-[12px] font-semibold text-[#6e677c]">
+                                  {timeRange}
+                                  {location ? ` · ${location}` : ""}
+                                </p>
+                                {(courseLabel || item.type) && (
+                                  <p className="mt-0.5 text-[12px] font-bold capitalize" style={{ color }}>
+                                    {courseLabel ?? item.type}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="grid size-9 shrink-0 place-items-center rounded-full text-[#b0a9bc]">
+                                <Bell className="size-4" />
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
-      </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
+            <div className="grid grid-cols-7 border-b border-[#ece9f0]">
+              {weekdayLabels.map((day) => (
+                <div key={day} className="py-3 text-center text-[8px] font-black uppercase tracking-wide text-[#aaa4b1]">
+                  {day}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {visibleDays.map((day) => {
+                const items = eventsByDay.get(day) ?? [];
+                const outsideMonth = !day.startsWith(monthKey);
+                const dayNumber = Number(day.slice(-2));
+                const isToday = day === todayKey;
+                const shown = items.slice(0, 3);
+                return (
+                  <div
+                    key={day}
+                    className={`min-h-[118px] border-b border-r border-[#f0edf3] p-1.5 sm:min-h-[140px] sm:p-2 ${
+                      outsideMonth ? "bg-[#fbfaff] text-[#bbb5c2]" : ""
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setEventEditor(defaultEvent(day))}
+                        className={`grid size-7 place-items-center rounded-full text-[9px] font-extrabold ${
+                          isToday ? "bg-[#7259e8] text-white" : outsideMonth ? "text-[#aaa4b1]" : "text-[#514b5d]"
+                        }`}
+                      >
+                        {dayNumber}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEventEditor(defaultEvent(day))}
+                        aria-label={`Add calendar item on ${day}`}
+                        className="grid size-6 place-items-center rounded-md text-[#aaa4b1] hover:bg-[#f3f0ff] hover:text-[#7259e8]"
+                      >
+                        <Plus className="size-3" />
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {shown.map((item) => {
+                        const color =
+                          item.kind === "task"
+                            ? item.type === "completed"
+                              ? "#36a079"
+                              : "#d76d68"
+                            : item.kind === "group"
+                              ? "#36a079"
+                              : eventColors[item.type] ?? "#7259e8";
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => item.item && setEventEditor(item.item)}
+                            title={`${formatDate(item.startsAt, timezone, { hour: "numeric", minute: "2-digit" })} ${item.title}`}
+                            className="block w-full truncate rounded-md px-1.5 py-1 text-left text-[7px] font-bold leading-3 sm:text-[8px]"
+                            style={{ color, backgroundColor: `${color}16`, borderLeft: `2px solid ${color}` }}
+                          >
+                            <span className="mr-1">
+                              {formatDate(item.startsAt, timezone, { hour: "numeric", minute: "2-digit" })}
+                            </span>
+                            {item.title}
+                          </button>
+                        );
+                      })}
+                      {items.length > shown.length && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAnchorKey(day);
+                            setSelectedDayKey(day);
+                            setCalendarMode("week");
+                          }}
+                          className="px-1 text-[7px] font-bold text-[#7259e8]"
+                        >
+                          +{items.length - shown.length} more
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-[#ece9f0] px-4 py-3 sm:px-5">{[["#7259e8", "School"], ["#d76d68", "Tasks"], ["#36a079", "Group sessions"], ["#477fca", "Personal study"]].map(([color, label]) => <span key={label} className="flex items-center gap-1.5 text-[8px] font-bold text-[#898391]"><i className="size-2 rounded-full" style={{ background: color }} />{label}</span>)}</div>
     </section>
 
@@ -495,9 +696,9 @@ export function StudyCalendar({
           <button type="button" onClick={() => {setPlanOpen(true); setPlanError(""); setPlanDraft([]);}} className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-3.5 text-[9px] font-extrabold text-white"><Sparkles className="size-3.5" /> Generate personal calendar</button>
         </section>
         <section className="rounded-[22px] border border-[#e9e5ef] bg-white p-4 sm:p-5">
-          <h2 className="text-xs font-extrabold">Import your school&apos;s calendar</h2><p className="mt-1 text-[9px] leading-4 text-[#8a8494]">Add CSV files directly, or extract a timetable from a PDF/image. Extracted items are drafts: check their dates and times before importing.</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[8px] font-bold text-[#746d7e]"><span className="inline-flex items-center gap-1.5 rounded-lg bg-[#f7f5ff] px-2.5 py-2"><FileSpreadsheet className="size-3.5 text-[#36a079]" /> CSV</span><span className="inline-flex items-center gap-1.5 rounded-lg bg-[#f7f5ff] px-2.5 py-2"><FileText className="size-3.5 text-[#d76d68]" /> PDF</span><span className="inline-flex items-center gap-1.5 rounded-lg bg-[#f7f5ff] px-2.5 py-2"><FileImage className="size-3.5 text-[#7259e8]" /> Image</span></div>
-          <button type="button" onClick={() => setImportOpen(true)} className="mt-3 text-[9px] font-extrabold text-[#7259e8]">Choose a calendar file <ArrowRight className="ml-1 inline size-3" /></button>
+          <h2 className="text-sm font-extrabold">Import school timetable</h2>
+          <p className="mt-1 text-[12px] leading-5 text-[#8a8494]">Upload a timetable screenshot, PDF, or CSV.</p>
+          <button type="button" onClick={() => setImportOpen(true)} className="mt-3 text-[13px] font-extrabold text-[#7259e8]">Choose a file <ArrowRight className="ml-1 inline size-3.5" /></button>
         </section>
       </div>
 
@@ -532,7 +733,7 @@ export function StudyCalendar({
       <div className="space-y-3 overflow-y-auto p-4 sm:p-5">
         <form onSubmit={importSchoolCalendar} className="space-y-3"><label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[#d8d2e5] bg-[#fbfaff] px-3 py-4 text-center hover:bg-[#f6f3ff] transition"><Upload className="size-5 text-[#7259e8]" /><span className="mt-2 text-[10px] font-extrabold text-[#17132d]">{selectedFileName ? selectedFileName : "Choose CSV, Excel (.xlsx, .xls), PDF, or image (PNG, JPEG, WebP) · Max 15 MB"}</span><span className="mt-0.5 text-[8px] text-[#8a8494]">{selectedFileName ? "Click to pick a different file" : "Click to browse files"}</span><input required name="file" type="file" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf,image/*" onChange={(e) => { const f = e.target.files?.[0]; setSelectedFileName(f ? `${f.name} (${(f.size / 1024).toFixed(0)} KB)` : ""); }} className="sr-only" /></label>
           <p className="text-[9px] leading-4 text-[#8a8494]">CSV and Excel (.xlsx, .xls) files are parsed locally using columns like <code>title,date,start_time,end_time,location,type,course</code>. Schedule screenshots (PNG, JPG, WebP) or PDFs are parsed using AI.</p>
-          <label className="flex items-start gap-2 rounded-lg bg-[#fff9e9] p-3 text-[9px] leading-4 text-[#685c41]"><input type="checkbox" checked={imageConsent} onChange={(event) => setImageConsent(event.target.checked)} className="mt-0.5 accent-[#7259e8]" /><span>PDF and timetable screenshot images are processed by AI for calendar extraction. School calendars can contain personal information; upload only files you are comfortable sharing with that provider. CSV and Excel files are parsed directly in-app.</span></label>
+          <label className="flex items-start gap-2 rounded-lg bg-[#fff9e9] p-3 text-[9px] leading-4 text-[#685c41]"><input type="checkbox" checked={imageConsent} onChange={(event) => setImageConsent(event.target.checked)} className="mt-0.5 accent-[#7259e8]" /><span>AI processes timetable images/PDFs. Upload only files you are comfortable sharing.</span></label>
           <button type="submit" disabled={importBusy} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-3.5 text-[9px] font-extrabold text-white disabled:opacity-60">{importBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}{importBusy ? "Reading calendar…" : "Extract calendar entries"}</button>
         </form>
         {importError && <p role="alert" className="rounded-lg bg-[#fff1ef] p-2.5 text-[9px] text-[#a44e48]">{importError}</p>}
