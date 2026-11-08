@@ -108,15 +108,17 @@ export default function LandingPage() {
           </div>
 
           {/* Hero Headline */}
-          <h1 className="fade-up mx-auto mt-7 max-w-[960px] text-balance text-[38px] font-black leading-[1.08] tracking-[-1.6px] text-[#17132d] sm:text-[66px] sm:leading-[1.02] sm:tracking-[-4.2px] lg:text-[84px]">
-            Every lecture, class & study group.{" "}
-            <span className="text-[#7259e8]">turned into </span>
-            <span className="relative inline-block whitespace-nowrap text-[#7259e8]">
-              mastery
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute -bottom-1 left-[-2%] right-[-2%] h-2.5 rounded-full bg-gradient-to-r from-[#ffd868]/90 via-[#ffdf78]/75 to-[#ffd457]/90 -z-10 sm:-bottom-1.5 sm:h-3"
-              />
+          <h1 className="fade-up mx-auto mt-7 max-w-[960px] text-balance text-[36px] font-black leading-[1.12] tracking-[-1.2px] text-[#17132d] sm:text-[66px] sm:leading-[1.02] sm:tracking-[-4.2px] lg:text-[84px]">
+            <span className="block sm:inline">Every lecture, class & study group.</span>{" "}
+            <span className="mt-1 block text-[#7259e8] sm:mt-0 sm:inline">
+              turned into{" "}
+              <span className="relative inline-block">
+                mastery
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -bottom-0.5 left-0 right-0 h-[0.35em] rounded-full bg-[#ffd868] opacity-90 -z-10 sm:-bottom-1 sm:h-[0.28em]"
+                />
+              </span>
             </span>
           </h1>
 

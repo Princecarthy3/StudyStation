@@ -11,7 +11,7 @@ import {
 import { Brand } from "@/components/brand";
 import { SiteHeader } from "@/components/site-header";
 import { ForceLightTheme } from "@/components/force-light-theme";
-import { ANDROID_APK_URL, ANDROID_VERSION } from "@/lib/android-download";
+import { ANDROID_APK_URL, ANDROID_VERSION, ANDROID_GITHUB_APK_URL } from "@/lib/android-download";
 import { AndroidIcon } from "@/components/android-icon";
 import { footerLinkGroups } from "@/components/info-page";
 
@@ -81,6 +81,9 @@ export default function DownloadPage() {
             </a>
             <span className="text-center text-[13px] font-bold text-[#8a8494] sm:text-left">
               Version {ANDROID_VERSION} · Direct APK install
+              <a href={ANDROID_GITHUB_APK_URL} className="mt-1 block font-bold text-[#7259e8]">
+                Alternate download (GitHub)
+              </a>
             </span>
           </div>
 
