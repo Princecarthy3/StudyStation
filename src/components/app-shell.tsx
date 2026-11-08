@@ -98,7 +98,15 @@ import { LectureCaptureModal } from "@/components/lecture-capture-modal";
 import { ReviewModal } from "@/components/review-section";
 import { AppTour } from "@/components/app-tour";
 import { exportNoteToPdf } from "@/lib/pdf-export";
-import { BackgroundRecordingManager } from "@/lib/background-recording";
+import { BackgroundRecordingManager } from "@/lib/background-recording"
+import {
+  isNativeAndroidRecorderAvailable,
+  nativeStartRecording,
+  nativePauseRecording,
+  nativeResumeRecording,
+  nativeStopRecording,
+  subscribeNativeRecording,
+} from "@/lib/native/lecture-recorder";
 
 type View =
   | "dashboard"
@@ -396,6 +404,41 @@ export function AppShell({
 
   async function startRecording() {
     try {
+      if (isNativeAndroidRecorderAvailable()) {
+        try {
+          const status = await nativeStartRecording({ title: "Lecture recording" });
+          setIsRecording(true);
+          setIsRecordingPaused(status.state === "paused");
+          recordingPausedRef.current = status.state === "paused";
+          setRecordedBlob(null);
+          showToast("Recording with Android background mic…", "success");
+          void subscribeNativeRecording((event) => {
+            if (event.type === "duration") {
+              // duration surfaced via existing timer if wired; keep status in sync
+            }
+            if (event.type === "state") {
+              setIsRecording(event.status.state === "recording" || event.status.state === "paused");
+              setIsRecordingPaused(event.status.state === "paused");
+              recordingPausedRef.current = event.status.state === "paused";
+              if (event.status.state === "idle" && event.status.filePath) {
+                // Native stop finalized a file — upload path handled in processRecording
+              }
+            }
+            if (event.type === "error") {
+              showToast(event.message, "error");
+              setIsRecording(false);
+              setIsRecordingPaused(false);
+            }
+          });
+          return;
+        } catch (nativeError) {
+          console.warn("[Recording] Native Android recorder failed, falling back to browser.", nativeError);
+          showToast(
+            nativeError instanceof Error ? nativeError.message : "Native recorder unavailable. Trying browser capture…",
+            "error",
+          );
+        }
+      }
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
         showToast("Live recording isn’t supported in this browser. Try uploading a file instead.", "error");
         return;
@@ -555,6 +598,15 @@ export function AppShell({
   }
 
   function pauseRecording() {
+    if (isNativeAndroidRecorderAvailable()) {
+      void nativePauseRecording()
+        .then(() => {
+          recordingPausedRef.current = true;
+          setIsRecordingPaused(true);
+        })
+        .catch(() => undefined);
+      return;
+    }
     if (mediaRecorderRef.current?.state !== "recording") return;
     backgroundRecordingRef.current?.pause();
     mediaRecorderRef.current.pause();
@@ -565,6 +617,15 @@ export function AppShell({
   }
 
   function resumeRecording() {
+    if (isNativeAndroidRecorderAvailable()) {
+      void nativeResumeRecording()
+        .then(() => {
+          recordingPausedRef.current = false;
+          setIsRecordingPaused(false);
+        })
+        .catch(() => undefined);
+      return;
+    }
     if (mediaRecorderRef.current?.state !== "paused") return;
     backgroundRecordingRef.current?.resume();
     mediaRecorderRef.current.resume();
@@ -581,6 +642,21 @@ export function AppShell({
   }
 
   function stopRecording() {
+    if (isNativeAndroidRecorderAvailable()) {
+      void nativeStopRecording()
+        .then((status) => {
+          setIsRecording(false);
+          setIsRecordingPaused(false);
+          recordingPausedRef.current = false;
+          if (status.filePath) {
+            showToast("Recording saved on device. Upload from the Android shell will finalize next.", "success");
+          }
+        })
+        .catch((err) => {
+          showToast(err instanceof Error ? err.message : "Could not stop native recording.", "error");
+        });
+      return;
+    }
     backgroundRecordingRef.current?.stop();
     setIsWakeLockActive(false);
     if (recognitionRef.current) {
@@ -590,7 +666,6 @@ export function AppShell({
     const recorder = mediaRecorderRef.current;
     if (recorder && (recorder.state === "recording" || recorder.state === "paused")) {
       try {
-        // Flush the final timeslice so iOS/Safari does not drop the last seconds.
         if (recorder.state === "recording" && typeof recorder.requestData === "function") {
           recorder.requestData();
         }
