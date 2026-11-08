@@ -1,7 +1,6 @@
-/** Prefer same-origin APK so mobile browsers can install without GitHub download quirks. */
-export const ANDROID_APK_URL = "/downloads/StudyStation.apk";
+/** Same-origin path so mobile browsers open the APK installer reliably. */
+export const ANDROID_APK_URL = "/api/download/android";
 
-/** Fallback / release notes */
 export const ANDROID_RELEASE_URL =
   "https://github.com/Princecarthy3/StudyStation/releases/latest";
 
