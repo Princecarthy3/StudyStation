@@ -1,16 +1,22 @@
 import type { SVGProps } from "react";
 
-/** Simple Android robot mark for download CTAs (not a trademark lockup). */
+/**
+ * Real Android logo (robot) as used on brand marks.
+ * Path adapted from the public Android robot silhouette.
+ */
 export function AndroidIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg
+      role="img"
       viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
       fill="currentColor"
       aria-hidden="true"
       className={className}
       {...props}
     >
-      <path d="M17.6 9.48l1.84-3.18a.5.5 0 10-.87-.5l-1.86 3.22A7.92 7.92 0 0012 8c-1.58 0-3.04.46-4.27 1.25L5.87 5.8a.5.5 0 10-.87.5l1.84 3.18A7.97 7.97 0 004 15.5V16a1 1 0 001 1h1v3.5a1.5 1.5 0 003 0V17h6v3.5a1.5 1.5 0 003 0V17h1a1 1 0 001-1v-.5c0-2.4-1.05-4.55-2.4-6.02zM8.5 13.75a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5zm7 0a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z" />
+      <title>Android</title>
+      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4483-.9993.9993-.9993c.5511 0 .9993.4483.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4483.9993.9993 0 .5511-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396" />
     </svg>
   );
 }
