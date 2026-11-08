@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Check, Download, MoreVertical, Share2, Smartphone, X } from "lucide-react";
 import { ANDROID_APK_URL } from "@/lib/android-download";
+import { AndroidIcon } from "@/components/android-icon";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -140,7 +141,7 @@ export function InstallAppProvider({ children }: { children: ReactNode }) {
                   className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-4 text-[12px] font-extrabold text-white"
                   aria-label="Download StudyStation for Android"
                 >
-                  <Download className="size-3.5" /> Download for Android
+                  <AndroidIcon className="size-3.5" /> Download for Android
                 </a>
                 <a href="/download" className="inline-flex h-10 items-center rounded-xl border border-[#e4dcff] px-4 text-[12px] font-extrabold text-[#5b47bd]">
                   Guide

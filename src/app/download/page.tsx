@@ -6,13 +6,13 @@ import {
   Check,
   Download,
   ShieldAlert,
-  Smartphone,
   Sparkles,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { SiteHeader } from "@/components/site-header";
 import { ForceLightTheme } from "@/components/force-light-theme";
 import { ANDROID_APK_URL, ANDROID_VERSION } from "@/lib/android-download";
+import { AndroidIcon } from "@/components/android-icon";
 import { footerLinkGroups } from "@/components/info-page";
 
 export const metadata: Metadata = {
@@ -56,7 +56,7 @@ export default function DownloadPage() {
         <div className="mt-8 rounded-[28px] border border-[#e8e4f1] bg-white p-6 shadow-sm sm:p-10">
           <div className="flex items-start gap-4">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#7259e8] to-[#5b47bd] text-white shadow-lg shadow-[#7259e8]/25">
-              <Smartphone className="size-7" />
+              <AndroidIcon className="size-8" />
             </span>
             <div className="min-w-0">
               <p className="text-[11px] font-black uppercase tracking-[.14em] text-[#7259e8]">Android APK</p>
@@ -76,7 +76,7 @@ export default function DownloadPage() {
               className="inline-flex h-14 items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#7259e8] to-[#6147dd] px-7 text-[15px] font-extrabold text-white shadow-[0_16px_36px_rgba(114,89,232,.32)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_44px_rgba(114,89,232,.4)]"
               aria-label="Download StudyStation for Android"
             >
-              <Download className="size-5" />
+              <AndroidIcon className="size-5" />
               Download for Android
             </a>
             <span className="text-center text-[13px] font-bold text-[#8a8494] sm:text-left">

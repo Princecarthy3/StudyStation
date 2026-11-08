@@ -51,6 +51,7 @@ import { landingUniversities } from "@/lib/universities";
 import { ReviewSection } from "@/components/review-section";
 import { ForceLightTheme } from "@/components/force-light-theme";
 import { ANDROID_APK_URL } from "@/lib/android-download";
+import { AndroidIcon } from "@/components/android-icon";
 
 const waveform = [18, 30, 46, 22, 58, 36, 68, 42, 24, 52, 76, 44, 62, 26, 54, 70, 40, 22, 48, 32, 64, 42, 26, 38];
 
@@ -958,7 +959,7 @@ export default function LandingPage() {
       <section className="px-5 py-16 sm:py-20">
         <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 rounded-[28px] border border-[#e8e4f1] bg-white p-8 text-center shadow-sm sm:flex-row sm:p-10 sm:text-left">
           <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#7259e8] to-[#5b47bd] text-white shadow-lg shadow-[#7259e8]/25">
-            <Smartphone className="size-8" />
+            <AndroidIcon className="size-8" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-black uppercase tracking-[.14em] text-[#7259e8]">Android</p>
@@ -975,7 +976,7 @@ export default function LandingPage() {
               className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7259e8] px-5 text-[14px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 transition hover:bg-[#6048d5]"
               aria-label="Download StudyStation for Android"
             >
-              <Download className="size-4" />
+              <AndroidIcon className="size-4" />
               Download for Android
             </a>
             <Link href="/download" className="text-center text-[12px] font-bold text-[#7259e8]">
