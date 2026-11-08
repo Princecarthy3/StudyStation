@@ -1,6 +1,7 @@
 /**
  * Bridge to the Android Capacitor LectureRecorder plugin.
- * On web / iOS this module reports unsupported and the existing MediaRecorder path is used.
+ * On web / iOS this reports unsupported; the existing MediaRecorder path is used.
+ * No Capacitor npm dependency — talks to window.Capacitor injected by the native shell.
  */
 
 export type NativeRecordingState = "idle" | "recording" | "paused" | "stopping" | "error";
@@ -24,69 +25,65 @@ type LectureRecorderPlugin = {
   resumeRecording(): Promise<NativeRecordingStatus>;
   stopRecording(): Promise<NativeRecordingStatus & { fileUri?: string; mimeType?: string; byteSize?: number }>;
   getRecordingStatus(): Promise<NativeRecordingStatus>;
-  addListener(
+  addListener?(
     eventName: "recordingStateChange" | "recordingDuration" | "recordingError",
     listener: (payload: Record<string, unknown>) => void,
-  ): Promise<{ remove: () => void }>;
+  ): Promise<{ remove: () => void }> | { remove: () => void };
 };
 
-function getCapacitor(): { isNativePlatform: () => boolean; Plugins?: Record<string, unknown> } | null {
+type CapacitorBridge = {
+  isNativePlatform?: () => boolean;
+  Plugins?: Record<string, unknown>;
+};
+
+function getCapacitor(): CapacitorBridge | null {
   if (typeof window === "undefined") return null;
-  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, unknown> } }).Capacitor;
-  return cap ?? null;
+  return (window as unknown as { Capacitor?: CapacitorBridge }).Capacitor ?? null;
 }
 
 export function isNativeAndroidRecorderAvailable(): boolean {
   const cap = getCapacitor();
   if (!cap?.isNativePlatform?.()) return false;
-  // Plugin is registered on Android shell only
   const plugins = cap.Plugins ?? {};
   return Boolean(plugins.LectureRecorder) || Boolean((window as unknown as { LectureRecorder?: unknown }).LectureRecorder);
 }
 
-async function getPlugin(): Promise<LectureRecorderPlugin | null> {
+function getPlugin(): LectureRecorderPlugin | null {
   const cap = getCapacitor();
   if (!cap?.isNativePlatform?.()) return null;
-
-  try {
-    // Prefer registerPlugin when @capacitor/core is available
-    const core = await import("@capacitor/core");
-    const plugin = core.registerPlugin<LectureRecorderPlugin>("LectureRecorder");
-    return plugin;
-  } catch {
-    const fallback = (cap.Plugins?.LectureRecorder ?? (window as unknown as { LectureRecorder?: LectureRecorderPlugin }).LectureRecorder) as
-      | LectureRecorderPlugin
-      | undefined;
-    return fallback ?? null;
-  }
+  const plugin = (cap.Plugins?.LectureRecorder ??
+    (window as unknown as { LectureRecorder?: LectureRecorderPlugin }).LectureRecorder) as
+    | LectureRecorderPlugin
+    | undefined;
+  return plugin ?? null;
 }
 
 export async function nativeStartRecording(options: { title?: string; courseId?: string } = {}) {
-  const plugin = await getPlugin();
+  const plugin = getPlugin();
   if (!plugin) throw new Error("Native Android recorder is not available.");
   return plugin.startRecording(options);
 }
 
 export async function nativePauseRecording() {
-  const plugin = await getPlugin();
+  const plugin = getPlugin();
   if (!plugin) throw new Error("Native Android recorder is not available.");
   return plugin.pauseRecording();
 }
 
 export async function nativeResumeRecording() {
-  const plugin = await getPlugin();
+  const plugin = getPlugin();
   if (!plugin) throw new Error("Native Android recorder is not available.");
   return plugin.resumeRecording();
 }
 
 export async function nativeStopRecording() {
-  const plugin = await getPlugin();
+  const plugin = getPlugin();
   if (!plugin) throw new Error("Native Android recorder is not available.");
   return plugin.stopRecording();
 }
 
 export async function nativeGetRecordingStatus() {
-  const plugin = await getPlugin();
+  const plugin = getPlugin();
   if (!plugin) return { state: "idle" as const, durationMs: 0, recordingId: null, filePath: null };
   return plugin.getRecordingStatus();
 }
@@ -94,25 +91,29 @@ export async function nativeGetRecordingStatus() {
 export async function subscribeNativeRecording(
   onEvent: (event: NativeRecordingEvent) => void,
 ): Promise<() => void> {
-  const plugin = await getPlugin();
+  const plugin = getPlugin();
   if (!plugin?.addListener) return () => undefined;
 
   const handles: Array<{ remove: () => void }> = [];
-  handles.push(
-    await plugin.addListener("recordingStateChange", (payload) => {
-      onEvent({ type: "state", status: payload as unknown as NativeRecordingStatus });
-    }),
-  );
-  handles.push(
-    await plugin.addListener("recordingDuration", (payload) => {
-      onEvent({ type: "duration", durationMs: Number((payload as { durationMs?: number }).durationMs ?? 0) });
-    }),
-  );
-  handles.push(
-    await plugin.addListener("recordingError", (payload) => {
-      onEvent({ type: "error", message: String((payload as { message?: string }).message ?? "Recording error") });
-    }),
-  );
+  const events: Array<["recordingStateChange" | "recordingDuration" | "recordingError", (p: Record<string, unknown>) => void]> = [
+    [
+      "recordingStateChange",
+      (payload) => onEvent({ type: "state", status: payload as unknown as NativeRecordingStatus }),
+    ],
+    [
+      "recordingDuration",
+      (payload) => onEvent({ type: "duration", durationMs: Number((payload as { durationMs?: number }).durationMs ?? 0) }),
+    ],
+    [
+      "recordingError",
+      (payload) => onEvent({ type: "error", message: String((payload as { message?: string }).message ?? "Recording error") }),
+    ],
+  ];
+
+  for (const [name, listener] of events) {
+    const handle = await Promise.resolve(plugin.addListener(name, listener));
+    handles.push(handle);
+  }
 
   return () => {
     handles.forEach((h) => {
