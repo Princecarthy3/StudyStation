@@ -25,6 +25,9 @@ export function SiteHeader() {
             <button onClick={openInstallInstructions} className="inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-[13px] font-bold text-[#514a66] transition hover:bg-[#f0edfa]" type="button">
               <Download className="size-4" /> Install
             </button>
+            <Link href="/download" className="inline-flex h-10 items-center rounded-xl border border-[#ded9ee] px-3.5 text-[13px] font-bold text-[#514a66] transition hover:border-[#7259e8] hover:text-[#7259e8]">
+              Android
+            </Link>
             <Link href="/auth/login" className="inline-flex h-10 items-center rounded-xl bg-[#17132d] px-5 text-[13px] font-bold text-white shadow-[0_8px_24px_rgba(23,19,45,.16)] transition hover:-translate-y-0.5 hover:bg-[#2b244b]">
               Sign in
             </Link>
@@ -40,7 +43,8 @@ export function SiteHeader() {
                 <a key={href} href={href} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 hover:bg-[#f7f5ff]">{label}</a>
               ))}
               <button onClick={openInstallInstructions} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl border border-[#ded9ee] px-4 py-3 font-bold" type="button"><Download className="size-4" /> Install app</button>
-              <Link href="/auth/login" className="mt-1 rounded-xl bg-[#7259e8] px-4 py-3 text-center font-bold text-white">Sign in</Link>
+              <a href="/download" className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-4 py-3 font-bold text-white">Download Android</a>
+              <Link href="/auth/login" className="mt-1 rounded-xl bg-[#17132d] px-4 py-3 text-center font-bold text-white">Sign in</Link>
             </nav>
           </div>
         )}

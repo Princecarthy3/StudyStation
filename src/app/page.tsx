@@ -14,6 +14,7 @@ import {
   ChevronDown,
   CirclePlay,
   Clock3,
+  Download,
   CloudUpload,
   FileAudio,
   FileText,
@@ -34,6 +35,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Smartphone,
   Target,
   Upload,
   UploadCloud,
@@ -48,6 +50,7 @@ import { footerLinkGroups } from "@/components/info-page";
 import { landingUniversities } from "@/lib/universities";
 import { ReviewSection } from "@/components/review-section";
 import { ForceLightTheme } from "@/components/force-light-theme";
+import { ANDROID_APK_URL } from "@/lib/android-download";
 
 const waveform = [18, 30, 46, 22, 58, 36, 68, 42, 24, 52, 76, 44, 62, 26, 54, 70, 40, 22, 48, 32, 64, 42, 26, 38];
 
@@ -947,6 +950,37 @@ export default function LandingPage() {
                 <p className="max-w-[700px] pt-3 text-[13px] leading-6 text-[#696277]">{answer}</p>
               </details>
             ))}
+          </div>
+        </div>
+      </section>
+
+            {/* Android download */}
+      <section className="px-5 py-16 sm:py-20">
+        <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 rounded-[28px] border border-[#e8e4f1] bg-white p-8 text-center shadow-sm sm:flex-row sm:p-10 sm:text-left">
+          <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#7259e8] to-[#5b47bd] text-white shadow-lg shadow-[#7259e8]/25">
+            <Smartphone className="size-8" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-black uppercase tracking-[.14em] text-[#7259e8]">Android</p>
+            <h2 className="mt-1 text-[22px] font-black tracking-tight text-[#17132d] sm:text-[26px]">
+              Download for Android
+            </h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-[#605a72] sm:text-[15px]">
+              Get StudyStation on your Android device and take your learning experience wherever you go.
+            </p>
+          </div>
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+            <a
+              href={ANDROID_APK_URL}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7259e8] px-5 text-[14px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 transition hover:bg-[#6048d5]"
+              aria-label="Download StudyStation for Android"
+            >
+              <Download className="size-4" />
+              Download for Android
+            </a>
+            <Link href="/download" className="text-center text-[12px] font-bold text-[#7259e8]">
+              Installation guide
+            </Link>
           </div>
         </div>
       </section>

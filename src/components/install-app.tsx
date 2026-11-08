@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Check, Download, MoreVertical, Share2, Smartphone, X } from "lucide-react";
+import { ANDROID_APK_URL } from "@/lib/android-download";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -130,6 +131,22 @@ export function InstallAppProvider({ children }: { children: ReactNode }) {
               </article>
             </div>
 
+            <div className="mx-5 mb-4 rounded-2xl border border-[#e4dcff] bg-[#f7f5ff] p-4 sm:mx-7">
+              <p className="text-[12px] font-extrabold text-[#17132d]">Prefer an Android app package?</p>
+              <p className="mt-1 text-[11px] leading-4 text-[#6e677c]">Install the APK directly on your phone (not from Google Play).</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a
+                  href={ANDROID_APK_URL}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-4 text-[12px] font-extrabold text-white"
+                  aria-label="Download StudyStation for Android"
+                >
+                  <Download className="size-3.5" /> Download for Android
+                </a>
+                <a href="/download" className="inline-flex h-10 items-center rounded-xl border border-[#e4dcff] px-4 text-[12px] font-extrabold text-[#5b47bd]">
+                  Guide
+                </a>
+              </div>
+            </div>
             <div className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:pb-7">
               <p className="max-w-sm text-[10px] leading-4 text-[#858093]">On a computer? Use the install icon in your browser’s address bar or choose <b>Install StudyStation</b> from its menu.</p>
               <div className="flex shrink-0 gap-2">
