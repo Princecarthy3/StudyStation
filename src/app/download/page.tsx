@@ -89,7 +89,8 @@ export default function DownloadPage() {
             <p>
               This is a <strong>direct APK installation</strong>, not a Google Play install. Android may ask for
               permission to install apps downloaded from outside the Play Store — that is expected for this
-              release.
+              release. If you see <strong>App not installed</strong>, remove any older StudyStation install,
+              download the APK again, and retry.
             </p>
           </div>
 
