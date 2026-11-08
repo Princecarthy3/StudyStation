@@ -108,11 +108,15 @@ export default function LandingPage() {
           </div>
 
           {/* Hero Headline */}
-          <h1 className="fade-up mx-auto mt-7 max-w-[960px] text-balance text-[44px] font-black leading-[1.02] tracking-[-2.8px] text-[#17132d] sm:text-[66px] sm:tracking-[-4.2px] lg:text-[84px]">
+          <h1 className="fade-up mx-auto mt-7 max-w-[960px] text-balance text-[38px] font-black leading-[1.08] tracking-[-1.6px] text-[#17132d] sm:text-[66px] sm:leading-[1.02] sm:tracking-[-4.2px] lg:text-[84px]">
             Every lecture, class & study group.{" "}
+            <span className="text-[#7259e8]">turned into </span>
             <span className="relative inline-block whitespace-nowrap text-[#7259e8]">
-              turned into mastery
-              <span className="absolute -bottom-1.5 left-0 h-3 w-full -rotate-1 rounded-full bg-gradient-to-r from-[#ffd868]/80 via-[#ffdf78]/60 to-[#ffd457]/80 -z-10" />
+              mastery
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -bottom-1 left-[-2%] right-[-2%] h-2.5 rounded-full bg-gradient-to-r from-[#ffd868]/90 via-[#ffdf78]/75 to-[#ffd457]/90 -z-10 sm:-bottom-1.5 sm:h-3"
+              />
             </span>
           </h1>
 
