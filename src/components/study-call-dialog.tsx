@@ -153,13 +153,14 @@ export function StudyCallDialog({
 
   // Persistent references to prevent effect re-triggering
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
   const isAudioMutedRef = useRef(isAudioMuted);
-  isAudioMutedRef.current = isAudioMuted;
-
   const isVideoOffRef = useRef(isVideoOff);
-  isVideoOffRef.current = isVideoOff;
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    isAudioMutedRef.current = isAudioMuted;
+    isVideoOffRef.current = isVideoOff;
+  }, [isAudioMuted, isVideoOff, onClose]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef(true);
@@ -277,6 +278,26 @@ export function StudyCallDialog({
     [groupId, session.id]
   );
 
+  const removePeer = useCallback((peerId: string) => {
+    const pc = peerConnectionsRef.current.get(peerId);
+    if (pc) {
+      pc.close();
+      peerConnectionsRef.current.delete(peerId);
+    }
+    pendingCandidatesRef.current.delete(peerId);
+    const cleanup = remoteAnalysersRef.current.get(peerId);
+    if (cleanup) {
+      cleanup();
+      remoteAnalysersRef.current.delete(peerId);
+    }
+    setPeers((prev) => {
+      if (!prev.has(peerId)) return prev;
+      const next = new Map(prev);
+      next.delete(peerId);
+      return next;
+    });
+  }, []);
+
   // Create peer connection
   const createPeerConnection = useCallback(
     (
@@ -376,26 +397,6 @@ export function StudyCallDialog({
     },
     [sendSignal, callData?.currentUser, attachAudioAnalyser]
   );
-
-  const removePeer = useCallback((peerId: string) => {
-    const pc = peerConnectionsRef.current.get(peerId);
-    if (pc) {
-      pc.close();
-      peerConnectionsRef.current.delete(peerId);
-    }
-    pendingCandidatesRef.current.delete(peerId);
-    const cleanup = remoteAnalysersRef.current.get(peerId);
-    if (cleanup) {
-      cleanup();
-      remoteAnalysersRef.current.delete(peerId);
-    }
-    setPeers((prev) => {
-      if (!prev.has(peerId)) return prev;
-      const next = new Map(prev);
-      next.delete(peerId);
-      return next;
-    });
-  }, []);
 
   // Auto end call on tab close/unload
   useEffect(() => {

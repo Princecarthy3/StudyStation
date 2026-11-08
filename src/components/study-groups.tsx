@@ -133,6 +133,7 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
   const [detailLoading, setDetailLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [nowTime, setNowTime] = useState(() => Date.now());
   const [showSession, setShowSession] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -146,6 +147,11 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
   const [callClock, setCallClock] = useState(0);
   const [showMembers, setShowMembers] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTime(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [showGroupTools, setShowGroupTools] = useState(false);
   const [showShareResources, setShowShareResources] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -591,7 +597,6 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
             <div className="px-4 pb-6 pt-3 sm:px-6">
             <div className="flex min-w-0 flex-col justify-between gap-3 border-b border-[#eeeaf2] pb-4 sm:flex-row sm:items-start"><div className="min-w-0"><p className="break-words text-[9px] font-bold capitalize text-[#7259e8]">{detail.group.visibility} group · <button type="button" onClick={() => setShowMembers(true)} className="underline underline-offset-2">{detail.memberCount ?? detail.members.length} members</button> {detail.role ? `· You are ${detail.role}` : ""}</p></div>
               <div className="flex flex-wrap gap-2">{detail.role ? <>{(() => {
-                const nowTime = Date.now();
                 const activeCall = detail.sessions.find((s) => {
                   if (s.status !== "scheduled") return false;
                   const startsAt = Date.parse(s.starts_at);
@@ -603,7 +608,6 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
             </div>
 
             {(() => {
-              const nowTime = Date.now();
               const activeCall = detail.sessions.find((s) => {
                 if (s.status !== "scheduled") return false;
                 const startsAt = Date.parse(s.starts_at);
@@ -642,7 +646,6 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
                   const matchingSession = targetSessionId
                     ? detail.sessions.find((s) => s.id === targetSessionId)
                     : null;
-                  const nowTime = Date.now();
                   const isCallActive = matchingSession ? (
                     matchingSession.status === "scheduled" &&
                     Date.parse(matchingSession.starts_at) <= nowTime &&
