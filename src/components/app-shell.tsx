@@ -98,7 +98,7 @@ import { LectureCaptureModal } from "@/components/lecture-capture-modal";
 import { ReviewModal } from "@/components/review-section";
 import { AppTour } from "@/components/app-tour";
 import { exportNoteToPdf } from "@/lib/pdf-export";
-import { BackgroundRecordingManager } from "@/lib/background-recording"
+import { BackgroundRecordingManager } from "@/lib/background-recording";
 import {
   isNativeAndroidRecorderAvailable,
   nativeStartRecording,
@@ -413,16 +413,10 @@ export function AppShell({
           setRecordedBlob(null);
           showToast("Recording with Android background mic…", "success");
           void subscribeNativeRecording((event) => {
-            if (event.type === "duration") {
-              // duration surfaced via existing timer if wired; keep status in sync
-            }
             if (event.type === "state") {
               setIsRecording(event.status.state === "recording" || event.status.state === "paused");
               setIsRecordingPaused(event.status.state === "paused");
               recordingPausedRef.current = event.status.state === "paused";
-              if (event.status.state === "idle" && event.status.filePath) {
-                // Native stop finalized a file — upload path handled in processRecording
-              }
             }
             if (event.type === "error") {
               showToast(event.message, "error");
@@ -433,10 +427,6 @@ export function AppShell({
           return;
         } catch (nativeError) {
           console.warn("[Recording] Native Android recorder failed, falling back to browser.", nativeError);
-          showToast(
-            nativeError instanceof Error ? nativeError.message : "Native recorder unavailable. Trying browser capture…",
-            "error",
-          );
         }
       }
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -649,7 +639,7 @@ export function AppShell({
           setIsRecordingPaused(false);
           recordingPausedRef.current = false;
           if (status.filePath) {
-            showToast("Recording saved on device. Upload from the Android shell will finalize next.", "success");
+            showToast("Recording saved on device.", "success");
           }
         })
         .catch((err) => {
@@ -666,6 +656,7 @@ export function AppShell({
     const recorder = mediaRecorderRef.current;
     if (recorder && (recorder.state === "recording" || recorder.state === "paused")) {
       try {
+        // Flush the final timeslice so iOS/Safari does not drop the last seconds.
         if (recorder.state === "recording" && typeof recorder.requestData === "function") {
           recorder.requestData();
         }
