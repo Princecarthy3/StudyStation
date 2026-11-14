@@ -279,13 +279,24 @@ export function AppShell({
       }
     });
 
-    // Check upcoming timetable events and exam reminders
+    // Check due tasks, classes, and study reminders (also when tab becomes visible)
     const checkReminders = () => {
-      fetch("/api/notifications/reminders", { method: "POST" }).catch(() => {});
+      void fetch("/api/notifications/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }).catch(() => undefined);
     };
     checkReminders();
-    const reminderInterval = window.setInterval(checkReminders, 180_000);
-    return () => window.clearInterval(reminderInterval);
+    const reminderInterval = window.setInterval(checkReminders, 120_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") checkReminders();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(reminderInterval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   useEffect(() => {
