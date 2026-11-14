@@ -89,7 +89,7 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#fbfaff] text-[#17132d]">
+    <main className="relative min-h-screen overflow-x-clip bg-[#fbfaff] text-[#17132d]">
       <ForceLightTheme />
       <SiteHeader />
 
