@@ -2,12 +2,295 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta name="theme-color" content="#7259e8" />
     <title>Offline · StudyStation</title>
     <style>
-      *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:28px;background:#fbfaff;color:#17132d;font-family:Arial,sans-serif}.card{max-width:460px;padding:42px;border:1px solid #e9e6f2;border-radius:28px;background:white;box-shadow:0 24px 70px rgba(30,22,67,.1);text-align:center}.logo{width:58px;height:58px;margin:auto;display:block;border-radius:18px;object-fit:cover}h1{margin:24px 0 10px;font-size:30px;letter-spacing:-1px}p{margin:0;color:#6e6a7e;line-height:1.65}.pill{display:inline-block;margin-top:24px;padding:12px 18px;border-radius:99px;background:#eeeaff;color:#5840cb;font-weight:700}
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #fbfaff;
+        color: #17132d;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
+      }
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 28px 20px 40px;
+      }
+      .pull-indicator {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 0;
+        overflow: hidden;
+        transition: height 0.15s ease-out;
+        z-index: 20;
+        pointer-events: none;
+      }
+      .pull-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid #e8e4ef;
+        background: rgba(255,255,255,0.95);
+        color: #8a8494;
+        font-size: 12px;
+        font-weight: 700;
+        box-shadow: 0 8px 24px rgba(30,22,67,0.08);
+      }
+      .pull-chip.ready {
+        border-color: #cfc4ff;
+        background: #f3f0ff;
+        color: #5b47bd;
+      }
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid #cfc4ff;
+        border-top-color: #7259e8;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .card {
+        max-width: 460px;
+        width: 100%;
+        padding: 42px 28px;
+        border: 1px solid #e9e6f2;
+        border-radius: 28px;
+        background: white;
+        box-shadow: 0 24px 70px rgba(30,22,67,.1);
+        text-align: center;
+      }
+      .logo {
+        width: 58px;
+        height: 58px;
+        margin: auto;
+        display: block;
+        border-radius: 18px;
+        object-fit: cover;
+      }
+      h1 {
+        margin: 24px 0 10px;
+        font-size: 28px;
+        letter-spacing: -1px;
+        line-height: 1.15;
+      }
+      p {
+        margin: 0;
+        color: #6e6a7e;
+        line-height: 1.65;
+        font-size: 15px;
+      }
+      .actions {
+        margin-top: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+      }
+      .pill {
+        display: inline-block;
+        padding: 12px 18px;
+        border-radius: 99px;
+        background: #eeeaff;
+        color: #5840cb;
+        font-weight: 700;
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+      }
+      .hint {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #9a94a3;
+        font-weight: 600;
+      }
+      .status {
+        margin-top: 14px;
+        min-height: 18px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #5b47bd;
+      }
     </style>
   </head>
-    <body><main class="card"><img class="logo" src="/logo.png" alt="" /><h1>You’re studying offline</h1><p>StudyStation saved the app shell for you. Reconnect to open your private study space, process new lectures, or ask your AI tutor.</p><div class="pill">We’ll reconnect automatically</div></main></body>
+  <body>
+    <div class="pull-indicator" id="pullIndicator" aria-hidden="true">
+      <div class="pull-chip" id="pullChip">
+        <span id="pullIcon"></span>
+        <span id="pullText">Pull to refresh</span>
+      </div>
+    </div>
+
+    <main class="card">
+      <img class="logo" src="/logo.png" alt="" />
+      <h1>You’re studying offline</h1>
+      <p>
+        StudyStation saved the app shell for you. Reconnect to open your private study space,
+        process new lectures, or ask your AI tutor.
+      </p>
+      <div class="actions">
+        <button type="button" class="pill" id="retryBtn">Try reconnecting</button>
+        <div class="hint">Or pull down to refresh</div>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        var THRESHOLD = 72;
+        var startY = 0;
+        var pulling = false;
+        var pull = 0;
+        var refreshing = false;
+
+        var indicator = document.getElementById("pullIndicator");
+        var chip = document.getElementById("pullChip");
+        var text = document.getElementById("pullText");
+        var icon = document.getElementById("pullIcon");
+        var status = document.getElementById("status");
+        var retryBtn = document.getElementById("retryBtn");
+
+        function setPullUI(height, ready, busy) {
+          indicator.style.height = height + "px";
+          chip.className = "pull-chip" + (ready || busy ? " ready" : "");
+          if (busy) {
+            text.textContent = "Reconnecting…";
+            icon.innerHTML = '<span class="spinner"></span>';
+          } else if (ready) {
+            text.textContent = "Release to refresh";
+            icon.textContent = "↑";
+          } else if (height > 8) {
+            text.textContent = "Pull to refresh";
+            icon.textContent = "↓";
+          }
+        }
+
+        function tryReconnect(fromPull) {
+          if (refreshing) return;
+          refreshing = true;
+          setPullUI(THRESHOLD, true, true);
+          status.textContent = "Checking connection…";
+          retryBtn.disabled = true;
+
+          // Prefer navigating back to the app shell; fall back to reload.
+          var target = "/app";
+          try {
+            var params = new URLSearchParams(window.location.search);
+            if (params.get("from")) target = params.get("from");
+          } catch (e) {}
+
+          fetch(target, { method: "HEAD", cache: "no-store" })
+            .then(function (res) {
+              if (res.ok || res.type === "opaqueredirect" || res.status === 0) {
+                status.textContent = "Back online — opening StudyStation…";
+                window.location.replace(target);
+                return;
+              }
+              throw new Error("still offline");
+            })
+            .catch(function () {
+              // Last resort: full reload of current document / home
+              return fetch("/", { method: "HEAD", cache: "no-store" })
+                .then(function (res) {
+                  if (res.ok) {
+                    status.textContent = "Back online — opening StudyStation…";
+                    window.location.replace("/app");
+                    return;
+                  }
+                  throw new Error("offline");
+                });
+            })
+            .catch(function () {
+              status.textContent = "Still offline. Pull down or try again when you have signal.";
+              refreshing = false;
+              retryBtn.disabled = false;
+              setPullUI(0, false, false);
+            });
+        }
+
+        function onStart(e) {
+          if (refreshing) return;
+          if ((window.scrollY || document.documentElement.scrollTop || 0) > 2) {
+            pulling = false;
+            return;
+          }
+          startY = e.touches[0].clientY;
+          pulling = true;
+        }
+
+        function onMove(e) {
+          if (!pulling || refreshing) return;
+          if ((window.scrollY || document.documentElement.scrollTop || 0) > 2) {
+            pulling = false;
+            setPullUI(0, false, false);
+            return;
+          }
+          var y = e.touches[0].clientY;
+          var delta = y - startY;
+          if (delta > 0) {
+            pull = Math.min(delta * 0.45, 120);
+            setPullUI(pull, pull >= THRESHOLD, false);
+            if (pull > 12 && e.cancelable) e.preventDefault();
+          } else {
+            pull = 0;
+            setPullUI(0, false, false);
+          }
+        }
+
+        function onEnd() {
+          if (!pulling) return;
+          pulling = false;
+          if (pull >= THRESHOLD && !refreshing) {
+            tryReconnect(true);
+          } else {
+            pull = 0;
+            setPullUI(0, false, false);
+          }
+        }
+
+        document.addEventListener("touchstart", onStart, { passive: true });
+        document.addEventListener("touchmove", onMove, { passive: false });
+        document.addEventListener("touchend", onEnd);
+        document.addEventListener("touchcancel", onEnd);
+
+        retryBtn.addEventListener("click", function () {
+          tryReconnect(false);
+        });
+
+        function onOnline() {
+          status.textContent = "Connection restored — opening StudyStation…";
+          window.location.replace("/app");
+        }
+        window.addEventListener("online", onOnline);
+
+        // Auto-retry a few times if the page was opened offline.
+        var attempts = 0;
+        var timer = setInterval(function () {
+          attempts += 1;
+          if (navigator.onLine) {
+            clearInterval(timer);
+            onOnline();
+            return;
+          }
+          if (attempts >= 12) clearInterval(timer);
+        }, 4000);
+      })();
+    </script>
+  </body>
 </html>
