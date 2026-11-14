@@ -119,12 +119,19 @@ export async function processUserReminders(
       let titlePrefix = "Task due";
       let body = "";
 
-      // Windows are wide enough for a 5–15 minute cron without missing due alerts.
+      // Windows are wide enough for a 5-minute cron without missing due alerts.
       if (overdue && mins >= -180) {
         windowTag = "overdue";
         titlePrefix = "Task overdue";
         body = `"${task.title}" was due ${Math.abs(mins) < 60 ? `${Math.abs(mins)}m` : `${Math.abs(hrs)}h`} ago.`;
-      } else if (mins >= 0 && mins <= 45) {
+      } else if (mins >= -2 && mins <= 5) {
+        // Exact due window (covers clock drift and 5-min cron lag)
+        windowTag = "due-now";
+        titlePrefix = high ? "High priority task is due" : "Task is due";
+        body = mins <= 0
+          ? `"${task.title}" is due now.`
+          : `"${task.title}" is due in ${mins} minute${mins === 1 ? "" : "s"}.`;
+      } else if (mins > 5 && mins <= 45) {
         windowTag = "due-soon";
         titlePrefix = high ? "High priority task due soon" : "Task due soon";
         body = `"${task.title}" is due in ${Math.max(1, mins)} minute${mins === 1 ? "" : "s"}.`;
@@ -146,7 +153,8 @@ export async function processUserReminders(
 
       const exam = isExamLike(task.title);
       const assignment = isAssignmentLike(task.title);
-      const notifType = exam ? "exam_reminder" : assignment ? "assignment_due" : "study_reminder";
+      // Map to settings categories: exams → Assignments & exams; study-like titles → Study reminders; else Assignments
+      const notifType = exam ? "exam_reminder" : "assignment_due";
       if (exam) titlePrefix = titlePrefix.replace("Task", "Exam");
       if (assignment && !exam) titlePrefix = titlePrefix.replace("Task", "Assignment");
 

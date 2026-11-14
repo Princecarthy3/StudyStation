@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { processUserReminders } from "@/lib/notifications/reminders";
 
 export type Stage6ActionResult = { error?: string; success?: string };
 
@@ -192,6 +194,18 @@ export async function createStudyTask(formData: FormData): Promise<Stage6ActionR
     priority,
   });
   if (error) return { error: "We couldn’t save that task. Check that the Stage 4 migration is applied, then retry." };
+
+  // Kick reminder processing so a soon-due task can notify without waiting for the next poll/cron.
+  if (dueAt) {
+    void (async () => {
+      try {
+        const admin = createAdminClient();
+        await processUserReminders(auth.user.id, admin);
+      } catch (err) {
+        console.warn("[createStudyTask] reminder pass failed", err);
+      }
+    })();
+  }
 
   revalidatePath("/app");
   return { success: "Task added to your study list." };
