@@ -21,9 +21,9 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { createPlannerEvents, deletePlannerEvent, savePlannerEvent, type PlannerEventInput, type Stage6ActionResult } from "@/app/app/stage6-actions";
+import { createPlannerEvents, createStudyTask, deletePlannerEvent, savePlannerEvent, updateStudyTask, type PlannerEventInput, type Stage6ActionResult } from "@/app/app/stage6-actions";
 import type { Stage6Course } from "@/components/stage6-workspace";
-import type { PlannerData, PlannerEvent } from "@/components/study-planner";
+import type { PlannerData, PlannerEvent, PlannerTask } from "@/components/study-planner";
 
 type DraftCalendarEvent = {
   title: string;
@@ -152,6 +152,7 @@ export function StudyCalendar({
   const [calendarMode, setCalendarMode] = useState<"month" | "week">("month");
   const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
   const [eventEditor, setEventEditor] = useState<PlannerEvent | null>(null);
+  const [taskEditor, setTaskEditor] = useState<PlannerTask | null | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
@@ -267,6 +268,20 @@ export function StudyCalendar({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     runEventAction(() => savePlannerEvent(form), true);
+  }
+
+  function submitTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setStatusMessage("");
+    startTransition(async () => {
+      const result = await (taskEditor?.id ? updateStudyTask(form) : createStudyTask(form));
+      setStatusMessage(result.error ?? result.success ?? "Task saved.");
+      if (!result.error) {
+        setTaskEditor(undefined);
+        router.refresh();
+      }
+    });
   }
 
   async function savePreferences() {
@@ -467,7 +482,7 @@ export function StudyCalendar({
   return <div className="fade-up space-y-5">
     <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div><p className="text-[10px] font-black uppercase tracking-[.15em] text-[#7259e8]">FULL STUDY CALENDAR</p><h1 className="mt-1 text-[25px] font-black tracking-[-1.1px] text-[#17132d] sm:text-[29px]">Your calendar</h1><p className="mt-1.5 text-[12px] leading-5 text-[#7d7789]">School events, exams, tasks, group sessions, and personal study blocks · {timezone}</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setImportOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#e5e1eb] bg-white px-3 text-[10px] font-extrabold text-[#5e47c4]"><Upload className="size-3.5" /> Import school calendar</button><button type="button" onClick={() => {setEventEditor(defaultEvent(todayKey)); setStatusMessage("");}} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-3.5 text-[10px] font-extrabold text-white"><Plus className="size-3.5" /> Add event</button></div>
+      <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setImportOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#e5e1eb] bg-white px-3 text-[10px] font-extrabold text-[#5e47c4]"><Upload className="size-3.5" /> Import school calendar</button><button type="button" onClick={() => {setTaskEditor(null); setStatusMessage("");}} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#e5e1eb] bg-white px-3.5 text-[10px] font-extrabold text-[#5e47c4]"><Plus className="size-3.5" /> Add task</button><button type="button" onClick={() => {setEventEditor(defaultEvent(todayKey)); setStatusMessage("");}} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-3.5 text-[10px] font-extrabold text-white"><Plus className="size-3.5" /> Add event</button></div>
     </header>
 
     {statusMessage && <p role="status" className={`rounded-xl px-4 py-3 text-xs font-semibold ${statusMessage.includes("could") || statusMessage.includes("valid") ? "bg-[#fff1ef] text-[#a44e48]" : "bg-[#f1efff] text-[#5b47bd]"}`}>{statusMessage}</p>}
@@ -475,7 +490,7 @@ export function StudyCalendar({
     <section className="overflow-hidden rounded-[24px] border border-[#e6e2ea] bg-white">
       <div className="flex flex-col justify-between gap-3 border-b border-[#ece9f0] px-4 py-4 sm:flex-row sm:items-center sm:px-5">
         <div className="flex items-center gap-2"><button type="button" onClick={() => moveCalendar(-1)} aria-label="Previous calendar range" className="grid size-8 place-items-center rounded-lg border border-[#e6e2ea]"><ChevronLeft className="size-4" /></button><button type="button" onClick={() => setAnchorKey(todayKey)} className="h-8 rounded-lg border border-[#e6e2ea] px-2.5 text-[9px] font-bold">Today</button><button type="button" onClick={() => moveCalendar(1)} aria-label="Next calendar range" className="grid size-8 place-items-center rounded-lg border border-[#e6e2ea]"><ChevronRight className="size-4" /></button><h2 className="ml-1 text-sm font-extrabold">{title}</h2></div>
-        <div className="flex items-center gap-2"><div className="flex rounded-lg bg-[#f4f2f7] p-1">{(["month", "week"] as const).map((mode) => <button key={mode} type="button" onClick={() => setCalendarMode(mode)} aria-pressed={calendarMode === mode} className={`rounded-md px-3 py-1.5 text-[9px] font-extrabold capitalize ${calendarMode === mode ? "bg-white text-[#7259e8] shadow-sm" : "text-[#8e8895]"}`}>{mode}</button>)}</div><button type="button" onClick={() => setEventEditor(defaultEvent(anchorKey))} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#f1efff] px-3 text-[9px] font-extrabold text-[#5e47c4]"><Plus className="size-3" /> Add item</button></div>
+        <div className="flex items-center gap-2"><div className="flex rounded-lg bg-[#f4f2f7] p-1">{(["month", "week"] as const).map((mode) => <button key={mode} type="button" onClick={() => setCalendarMode(mode)} aria-pressed={calendarMode === mode} className={`rounded-md px-3 py-1.5 text-[9px] font-extrabold capitalize ${calendarMode === mode ? "bg-white text-[#7259e8] shadow-sm" : "text-[#8e8895]"}`}>{mode}</button>)}</div><button type="button" onClick={() => {setTaskEditor(null); setStatusMessage("");}} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2ea] bg-white px-3 text-[9px] font-extrabold text-[#5e47c4]"><Plus className="size-3" /> Add task</button><button type="button" onClick={() => setEventEditor(defaultEvent(anchorKey))} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#f1efff] px-3 text-[9px] font-extrabold text-[#5e47c4]"><Plus className="size-3" /> Add item</button></div>
       </div>
       {calendarMode === "week" ? (
         <div className="px-3 pb-4 pt-1 sm:px-5">
@@ -719,7 +734,25 @@ export function StudyCalendar({
       </section>
     </section>
 
-    {eventEditor && <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-[#17132d]/50 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="calendar-event-title" className="my-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[22px] bg-white p-5 shadow-2xl sm:p-6">
+        {taskEditor !== undefined && <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-[#17132d]/50 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="planner-task-title" className="my-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[22px] bg-white p-5 shadow-2xl sm:p-6">
+      <div className="flex items-start justify-between"><div><p className="text-[9px] font-black uppercase tracking-wide text-[#7259e8]">STUDY TASK</p><h2 id="planner-task-title" className="mt-1 text-lg font-extrabold">{taskEditor ? "Edit task" : "Add a study task"}</h2></div><button type="button" aria-label="Close task" onClick={() => setTaskEditor(undefined)} className="grid size-8 place-items-center rounded-lg border border-[#e9e5ef]"><X className="size-4" /></button></div>
+      <form onSubmit={submitTask} className="mt-4 space-y-3">
+        <input type="hidden" name="id" value={taskEditor?.id ?? ""} />
+        <input type="hidden" name="timezone" value={timezone} />
+        <label className="block text-[10px] font-bold">Task title<input required name="title" minLength={2} maxLength={160} defaultValue={taskEditor?.title ?? ""} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs outline-none focus:border-[#aa9af0]" placeholder="e.g. Review lecture notes" /></label>
+        <label className="block text-[10px] font-bold">Notes<textarea name="description" maxLength={2000} rows={3} defaultValue={taskEditor?.description ?? ""} className="mt-1.5 w-full rounded-xl border border-[#e7e3ec] p-3 text-xs outline-none focus:border-[#aa9af0]" /></label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-[10px] font-bold">Due date and time<input name="dueAt" type="datetime-local" defaultValue={localInput(taskEditor?.dueAt ?? null, timezone)} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-2 text-[10px]" /></label>
+          <label className="block text-[10px] font-bold">Course<select name="courseId" defaultValue={taskEditor?.courseId ?? ""} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="">No course</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.code} · {course.title}</option>)}</select></label>
+          <label className="block text-[10px] font-bold">Priority<select name="priority" defaultValue={taskEditor?.priority ?? "normal"} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label>
+          {taskEditor && <label className="block text-[10px] font-bold">Status<select name="status" defaultValue={taskEditor.status} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="todo">To do</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>}
+        </div>
+        {statusMessage && <p role="alert" className="text-[9px] text-[#a44e48]">{statusMessage}</p>}
+        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setTaskEditor(undefined)} className="h-9 rounded-lg px-3 text-[10px] font-bold text-[#777180]">Cancel</button><button disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}{taskEditor ? "Save task" : "Add task"}</button></div>
+      </form>
+    </section></div>}
+
+{eventEditor && <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-[#17132d]/50 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="calendar-event-title" className="my-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[22px] bg-white p-5 shadow-2xl sm:p-6">
       <div className="flex items-start justify-between"><div><p className="text-[9px] font-black uppercase tracking-wide text-[#7259e8]">{eventEditor.id ? "CALENDAR ITEM" : "NEW CALENDAR ITEM"}</p><h2 id="calendar-event-title" className="mt-1 text-lg font-extrabold">{eventEditor.id ? "Edit calendar item" : "Add to your calendar"}</h2></div><button type="button" aria-label="Close calendar item" onClick={() => setEventEditor(null)} className="grid size-8 place-items-center rounded-lg border border-[#e9e5ef]"><X className="size-4" /></button></div>
       <form onSubmit={submitEvent} className="mt-4 space-y-3"><input type="hidden" name="id" value={eventEditor.id} /><input type="hidden" name="timezone" value={timezone} /><label className="block text-[10px] font-bold">Title<input required minLength={2} maxLength={160} name="title" defaultValue={eventEditor.title} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs" /></label>
         <div className="grid gap-3 sm:grid-cols-2"><label className="block text-[10px] font-bold">Type<select name="type" defaultValue={eventEditor.type} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="lecture">School class</option><option value="lab">Lab</option><option value="seminar">Seminar</option><option value="study">Study block</option><option value="review">Review</option><option value="exam">Exam</option><option value="personal">Personal</option></select></label><label className="block text-[10px] font-bold">Course<select name="courseId" defaultValue={eventEditor.courseId ?? ""} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="">No course</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.code} · {course.title}</option>)}</select></label><label className="block text-[10px] font-bold">Starts<input required name="startsAt" type="datetime-local" defaultValue={eventEditor.id ? localInput(eventEditor.startsAt, timezone) : `${eventEditor.startsAt.slice(0, 10)}T09:00`} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-2 text-[10px]" /></label><label className="block text-[10px] font-bold">Ends<input required name="endsAt" type="datetime-local" defaultValue={eventEditor.id ? localInput(eventEditor.endsAt, timezone) : `${eventEditor.endsAt.slice(0, 10)}T10:00`} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-2 text-[10px]" /></label></div>
