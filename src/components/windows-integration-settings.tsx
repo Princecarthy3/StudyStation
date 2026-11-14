@@ -21,8 +21,18 @@ export function WindowsIntegrationSettings() {
   const [companionChecking, setCompanionChecking] = useState(true);
   const [isWindowsOS] = useState(() => typeof window !== "undefined" && /Win/i.test(navigator.userAgent || navigator.platform));
 
+  const [isStandaloneApp, setIsStandaloneApp] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     if (typeof window === "undefined") return;
+
+    // Check if launched as installed PWA / standalone MSIX app
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+      document.referrer.includes("android-app://");
+    setIsStandaloneApp(isStandalone);
 
     // Check navigator.runOnOsLogin state
     const nav = navigator as unknown as { runOnOsLogin?: RunOnOsLoginAPI };
@@ -54,6 +64,11 @@ export function WindowsIntegrationSettings() {
     } finally {
       setStartupBusy(false);
     }
+  }
+
+  // Only render on Windows machines AND when installed as standalone app (or when startup is configurable)
+  if (!mounted || !isWindowsOS || !isStandaloneApp) {
+    return null;
   }
 
   return (
