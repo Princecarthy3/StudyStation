@@ -74,7 +74,7 @@ import { Brand } from "@/components/brand";
 import { PdfPageViewer } from "@/components/pdf-page-viewer";
 import { ProfileSettings } from "@/components/profile-settings";
 import { useTheme } from "@/components/theme-provider";
-import { useInstallApp } from "@/components/install-app";
+import { useInstallApp, usePromptInstallAfterLogin } from "@/components/install-app";
 import { NetworkStatusBanner, PullToRefresh } from "@/components/network-and-refresh";
 import {
   LectureStudio,
