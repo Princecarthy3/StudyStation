@@ -9,6 +9,8 @@ async function getAuth() {
   return error || !user ? null : { supabase, user };
 }
 
+const DEFAULT_VAPID_PUBLIC_KEY = "BKFVE4zKCCPGaYUiClW8xjE4On_7iqIEWDikhJk66V-dnXrZvm9xyf9bv2_cZ76w4mr3etHQ1lWxeErCnIHTl0I";
+
 export async function GET() {
   let auth;
   try {
@@ -18,7 +20,7 @@ export async function GET() {
   }
   if (!auth) return NextResponse.json({ error: "Sign in to enable notifications." }, { status: 401 });
 
-  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim() || "";
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim() || DEFAULT_VAPID_PUBLIC_KEY;
   return NextResponse.json({ publicKey });
 }
 

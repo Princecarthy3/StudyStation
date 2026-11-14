@@ -27,13 +27,17 @@ const categoryByType: Record<string, string> = {
   announcement: "system",
 };
 
+const FALLBACK_VAPID_PUBLIC_KEY = "BKFVE4zKCCPGaYUiClW8xjE4On_7iqIEWDikhJk66V-dnXrZvm9xyf9bv2_cZ76w4mr3etHQ1lWxeErCnIHTl0I";
+const FALLBACK_VAPID_PRIVATE_KEY = "7likcaT9m2g88coFQ3rbQ2v8e42Xz95cCcE_TpuS4T4";
+const FALLBACK_VAPID_SUBJECT = "mailto:notifications@studystation.vercel.app";
+
 let vapidConfigured = false;
 
 function configureVapid() {
   if (vapidConfigured) return true;
-  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
-  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
-  const subject = process.env.VAPID_SUBJECT?.trim();
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim() || FALLBACK_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim() || FALLBACK_VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT?.trim() || FALLBACK_VAPID_SUBJECT;
   if (!publicKey || !privateKey || !subject) {
     console.warn("Web Push is not configured; database notifications will still be delivered in-app.");
     return false;
