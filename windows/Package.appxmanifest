@@ -9,14 +9,14 @@
   IgnorableNamespaces="uap uap3 uap5 desktop rescap">
 
   <Identity
-    Name="StudyStation.StudyCompanion"
-    Publisher="CN=StudyStation"
-    Version="1.0.1.0"
+    Name="PrinceMaccarthy.StudyStation"
+    Publisher="CN=C4E31515-8345-47FC-AF87-DF91F66FF944, OID.2.25.311729368913984317654407730594956997722=1"
+    Version="1.0.2.0"
     ProcessorArchitecture="neutral" />
 
   <Properties>
-    <DisplayName>StudyStation — AI Study Companion</DisplayName>
-    <PublisherDisplayName>StudyStation Team</PublisherDisplayName>
+    <DisplayName>StudyStation</DisplayName>
+    <PublisherDisplayName>Prince Maccarthy</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
     <Description>Capture lectures, create AI-powered study notes, revise flashcards and practice quizzes, manage timetable and study groups.</Description>
   </Properties>
