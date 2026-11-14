@@ -288,7 +288,7 @@ export function AppShell({
       }).catch(() => undefined);
     };
     checkReminders();
-    const reminderInterval = window.setInterval(checkReminders, 120_000);
+    const reminderInterval = window.setInterval(checkReminders, 60_000);
     const onVisible = () => {
       if (document.visibilityState === "visible") checkReminders();
     };

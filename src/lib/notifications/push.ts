@@ -57,14 +57,19 @@ export async function sendPushNotification(userIds: string[], notification: Push
     .in("user_id", userIds);
   if (preferenceError) {
     console.error("Web Push preferences could not be loaded", { code: preferenceError.code });
-    return;
+    // Continue with defaults so due-task / class reminders still attempt delivery.
   }
 
   const preferenceByUser = new Map((preferences ?? []).map((preference) => [preference.user_id, preference]));
   const category = categoryByType[notification.type] ?? "system";
   const eligibleUserIds = userIds.filter((userId) => {
     const preference = preferenceByUser.get(userId);
-    return preference?.enabled !== false && preference?.categories?.[category] !== false;
+    // No row yet → allow all categories (matches API defaults).
+    if (!preference) return true;
+    if (preference.enabled === false) return false;
+    const categories = (preference.categories ?? {}) as Record<string, boolean>;
+    // Explicit false blocks; missing key stays allowed.
+    return categories[category] !== false;
   });
   if (!eligibleUserIds.length) return;
 

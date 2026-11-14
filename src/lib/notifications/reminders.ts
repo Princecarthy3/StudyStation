@@ -1,7 +1,13 @@
 import "server-only";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispatchNotification } from "@/lib/notifications/service";
+
+// Admin client shape (avoid tight coupling to generated Supabase types)
+type AdminClient = {
+  from: (table: string) => {
+    select: (columns: string) => any;
+  };
+};
 
 function minutesUntil(target: Date, now: Date) {
   return Math.round((target.getTime() - now.getTime()) / (60 * 1000));
@@ -26,7 +32,7 @@ function isAssignmentLike(title: string, type?: string | null) {
  */
 export async function processUserReminders(
   userId: string,
-  admin: SupabaseClient,
+  admin: any,
   now = new Date(),
 ) {
   let remindersSent = 0;
@@ -45,7 +51,8 @@ export async function processUserReminders(
     for (const event of upcomingEvents) {
       const startTime = new Date(event.starts_at);
       const mins = Math.max(1, minutesUntil(startTime, now));
-      if (!(mins <= 60 && (mins >= 40 || (mins >= 12 && mins <= 20) || mins <= 6))) {
+      // ~45m, ~15m, and ~5m windows (tolerant of a 5-minute cron).
+      if (!(mins <= 55 && (mins >= 35 || (mins >= 10 && mins <= 22) || mins <= 8))) {
         continue;
       }
       const timeLabel = startTime.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -82,8 +89,8 @@ export async function processUserReminders(
     }
   }
 
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-  const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const in26Hours = new Date(now.getTime() + 26 * 60 * 60 * 1000);
 
   const { data: dueTasks, error: tasksError } = await admin
     .from("study_tasks")
@@ -91,8 +98,8 @@ export async function processUserReminders(
     .eq("owner_id", userId)
     .in("status", ["todo", "in_progress"])
     .not("due_at", "is", null)
-    .gte("due_at", twoHoursAgo.toISOString())
-    .lte("due_at", in24Hours.toISOString());
+    .gte("due_at", threeHoursAgo.toISOString())
+    .lte("due_at", in26Hours.toISOString());
 
   if (tasksError) {
     console.warn("[Reminders] study_tasks query failed", tasksError.message);
@@ -112,24 +119,27 @@ export async function processUserReminders(
       let titlePrefix = "Task due";
       let body = "";
 
-      if (overdue && mins >= -120) {
+      // Windows are wide enough for a 5–15 minute cron without missing due alerts.
+      if (overdue && mins >= -180) {
         windowTag = "overdue";
         titlePrefix = "Task overdue";
         body = `"${task.title}" was due ${Math.abs(mins) < 60 ? `${Math.abs(mins)}m` : `${Math.abs(hrs)}h`} ago.`;
-      } else if (mins >= 0 && mins <= 30) {
-        windowTag = "30m";
+      } else if (mins >= 0 && mins <= 45) {
+        windowTag = "due-soon";
         titlePrefix = high ? "High priority task due soon" : "Task due soon";
         body = `"${task.title}" is due in ${Math.max(1, mins)} minute${mins === 1 ? "" : "s"}.`;
-      } else if (mins > 30 && mins <= 180) {
-        windowTag = "3h";
+      } else if (mins > 45 && mins <= 4 * 60) {
+        windowTag = "few-hours";
         titlePrefix = "Task due in a few hours";
         body = `"${task.title}" is due in about ${Math.max(1, hrs)} hour${hrs === 1 ? "" : "s"}.`;
-      } else if (mins > 180 && mins <= 24 * 60) {
-        if ((mins >= 20 * 60 && mins <= 24 * 60) || (mins >= 11 * 60 && mins <= 14 * 60)) {
-          windowTag = mins >= 18 * 60 ? "24h" : "12h";
-          titlePrefix = "Upcoming task";
-          body = `"${task.title}" is due in about ${Math.max(1, hrs)} hours.`;
-        }
+      } else if (mins > 4 * 60 && mins <= 14 * 60) {
+        windowTag = "half-day";
+        titlePrefix = "Upcoming task";
+        body = `"${task.title}" is due in about ${Math.max(1, hrs)} hours.`;
+      } else if (mins > 14 * 60 && mins <= 26 * 60) {
+        windowTag = "day-ahead";
+        titlePrefix = "Task due tomorrow";
+        body = `"${task.title}" is due in about ${Math.max(1, hrs)} hours.`;
       }
 
       if (!windowTag) continue;
