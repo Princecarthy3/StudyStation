@@ -131,7 +131,7 @@ export async function processUserReminders(
         body = mins <= 0
           ? `"${task.title}" is due now.`
           : `"${task.title}" is due in ${mins} minute${mins === 1 ? "" : "s"}.`;
-      } else if (mins > 5 && mins <= 45) {
+      } else if (mins > 5 && mins <= 75) {
         windowTag = "due-soon";
         titlePrefix = high ? "High priority task due soon" : "Task due soon";
         body = `"${task.title}" is due in ${Math.max(1, mins)} minute${mins === 1 ? "" : "s"}.`;
@@ -153,10 +153,15 @@ export async function processUserReminders(
 
       const exam = isExamLike(task.title);
       const assignment = isAssignmentLike(task.title);
-      // Map to settings categories: exams → Assignments & exams; study-like titles → Study reminders; else Assignments
-      const notifType = exam ? "exam_reminder" : "assignment_due";
+      // Map to settings categories so each toggle can enable delivery.
+      // Exams → Assignments & exams; assignment-like → Assignments & exams; everything else → Study reminders.
+      const notifType = exam
+        ? "exam_reminder"
+        : assignment
+          ? "assignment_due"
+          : "study_reminder";
       if (exam) titlePrefix = titlePrefix.replace("Task", "Exam");
-      if (assignment && !exam) titlePrefix = titlePrefix.replace("Task", "Assignment");
+      else if (assignment) titlePrefix = titlePrefix.replace("Task", "Assignment");
 
       await dispatchNotification({
         userIds: [userId],

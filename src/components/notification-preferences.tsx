@@ -99,7 +99,13 @@ export function NotificationPreferences() {
       });
       if (!response.ok) throw new Error((await response.json() as { error?: string }).error || "Notification preferences could not be saved.");
       setPreferences(await response.json() as Preferences);
-      setMessage("Notification preferences saved.");
+      setMessage(requestPermission ? "Notifications enabled on this device." : "Notification preferences saved.");
+      // Check due tasks / classes now so users are not waiting solely on the cron.
+      void fetch("/api/notifications/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test: false }),
+      }).catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Notification preferences could not be saved.");
     } finally {
