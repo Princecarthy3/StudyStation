@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 uap5 desktop rescap">
+
+  <Identity
+    Name="StudyStation.StudyCompanion"
+    Publisher="CN=StudyStation"
+    Version="1.0.1.0"
+    ProcessorArchitecture="neutral" />
+
+  <Properties>
+    <DisplayName>StudyStation — AI Study Companion</DisplayName>
+    <PublisherDisplayName>StudyStation Team</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+    <Description>Capture lectures, create AI-powered study notes, revise flashcards and practice quizzes, manage timetable and study groups.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+
+  <Applications>
+    <Application
+      Id="App"
+      StartPage="https://studystation.vercel.app/app?source=windows">
+      
+      <uap:VisualElements
+        DisplayName="StudyStation"
+        Description="AI-powered university study companion for lecture recording, notes, and study planning."
+        BackgroundColor="#7259e8"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        
+        <uap:DefaultTile
+          Wide310x150Logo="Images\Wide310x150Logo.png"
+          ShortName="StudyStation">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+
+        <uap:SplashScreen Image="Images\SplashScreen.png" BackgroundColor="#fbfaff" />
+        <uap:InitialRotationPreference>
+          <uap:Rotation Preference="portrait" />
+          <uap:Rotation Preference="landscape" />
+        </uap:InitialRotationPreference>
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- Windows Protocol Deep Linking: studystation:// and web+studystation:// -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="studystation">
+            <uap:DisplayName>StudyStation Protocol</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="web+studystation">
+            <uap:DisplayName>StudyStation Web Protocol</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+
+        <!-- Optional Windows Startup Task (User controllable in Windows Settings > Startup) -->
+        <uap5:Extension Category="windows.startupTask">
+          <uap5:StartupTask
+            TaskId="StudyStationStartup"
+            Enabled="false"
+            DisplayName="StudyStation Study Companion" />
+        </uap5:Extension>
+
+        <!-- Windows 11 Widgets Board Provider -->
+        <uap3:Extension Category="windows.appExecutionAlias">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="studystation.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+      </Extensions>
+
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!--
+      MICROSOFT STORE CERTIFICATION CAPABILITY AUDIT:
+      1. internetClient: Standard unrestricted capability. Required for communication with
+         StudyStation web services, Supabase database, and WebRTC study call signaling.
+      2. microphone: Standard device capability. Required for students to capture audio
+         lectures and participate in study group voice calls.
+      3. webcam: Standard device capability. Required for study group video calling.
+
+      RESTRICTED CAPABILITIES AUDIT (RESOLVED):
+      - PWABuilder's default template automatically included 'runFullTrust' (<rescap:Capability Name="runFullTrust" />),
+        which triggered Microsoft Store certification warning/blocker:
+        "The capability 'runFullTrust' is restricted and requires technical justification."
+      - In StudyStation's architecture, the hosted PWA runs securely inside the modern Edge/WebView2 container.
+        Neither 'runFullTrust', 'documentsLibrary', nor 'broadFileSystemAccess' are required for the standard store app.
+      - Removing 'runFullTrust' satisfies Microsoft Store Policy 10.2 and guarantees clean certification.
+    -->
+    <Capability Name="internetClient" />
+    <DeviceCapability Name="microphone" />
+    <DeviceCapability Name="webcam" />
+  </Capabilities>
+
+</Package>

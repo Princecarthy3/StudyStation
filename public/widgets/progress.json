@@ -1,0 +1,144 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "Image",
+              "url": "${$root.siteUrl}/icons/icon-192.png",
+              "size": "Small",
+              "style": "Person"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Study Progress",
+              "weight": "Bolder",
+              "size": "Medium",
+              "color": "Accent"
+            },
+            {
+              "type": "TextBlock",
+              "text": "Weekly Activity & Milestones",
+              "spacing": "None",
+              "isSubtle": true,
+              "size": "Small"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Medium",
+      "separator": true,
+      "columns": [
+        {
+          "type": "Column",
+          "width": 1,
+          "style": "emphasis",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${$root.studyHours}",
+              "size": "ExtraLarge",
+              "weight": "Bolder",
+              "color": "Accent",
+              "horizontalAlignment": "Center"
+            },
+            {
+              "type": "TextBlock",
+              "text": "Study Hours",
+              "size": "ExtraSmall",
+              "isSubtle": true,
+              "horizontalAlignment": "Center",
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": 1,
+          "style": "emphasis",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${$root.completedTasks}",
+              "size": "ExtraLarge",
+              "weight": "Bolder",
+              "color": "Good",
+              "horizontalAlignment": "Center"
+            },
+            {
+              "type": "TextBlock",
+              "text": "Tasks Done",
+              "size": "ExtraSmall",
+              "isSubtle": true,
+              "horizontalAlignment": "Center",
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": 1,
+          "style": "emphasis",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${$root.readyLectures}",
+              "size": "ExtraLarge",
+              "weight": "Bolder",
+              "horizontalAlignment": "Center"
+            },
+            {
+              "type": "TextBlock",
+              "text": "Lectures Ready",
+              "size": "ExtraSmall",
+              "isSubtle": true,
+              "horizontalAlignment": "Center",
+              "spacing": "None"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "spacing": "Medium",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "${$root.progressMotivator}",
+          "size": "Small",
+          "wrap": true,
+          "isSubtle": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Progress",
+      "url": "${$root.siteUrl}/app?view=reports"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Study Lab",
+      "url": "${$root.siteUrl}/app?view=assistant"
+    }
+  ]
+}

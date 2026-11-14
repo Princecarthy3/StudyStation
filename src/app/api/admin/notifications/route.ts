@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPushNotification } from "@/lib/notifications/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,9 +41,12 @@ export async function POST(request: Request) {
         title,
         body: content,
         type,
+        action_url: "/app",
+        dedupe_key: `announcement:${type}:${body.userId}:${Date.now()}`,
       });
 
       if (error) throw error;
+      await sendPushNotification([body.userId], { type, title, body: content, url: "/app" });
       return NextResponse.json({ ok: true, recipientCount: 1 });
     }
 
@@ -66,9 +70,13 @@ export async function POST(request: Request) {
         title,
         body: content,
         type,
+        action_url: "/app",
+        dedupe_key: `announcement:${type}:${uid}:${Date.now()}`,
       }));
-      await adminClient.from("notifications").insert(chunk);
+      const { error: insertError } = await adminClient.from("notifications").insert(chunk);
+      if (insertError) throw insertError;
     }
+    await sendPushNotification(userIds, { type, title, body: content, url: "/app" });
 
     return NextResponse.json({
       ok: true,

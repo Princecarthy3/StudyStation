@@ -99,6 +99,8 @@ import { ReviewModal } from "@/components/review-section";
 import { AppTour } from "@/components/app-tour";
 import { exportNoteToPdf } from "@/lib/pdf-export";
 import { BackgroundRecordingManager } from "@/lib/background-recording";
+import { RecordingJournal, type RecordingSessionMeta } from "@/lib/recording-recovery";
+import { WindowsCompanionClient } from "@/lib/windows-companion-client";
 
 type View =
   | "dashboard"
@@ -113,7 +115,7 @@ type View =
   | "assistant"
   | "profile";
 
-type AppNotification = { id: string; type: string; title: string; body: string; read_at: string | null; created_at: string };
+type AppNotification = { id: string; type: string; title: string; body: string; action_url?: string | null; read_at: string | null; created_at: string };
 
 type Modal = "capture" | "flashcards" | "note" | null;
 type SourceTab = "record" | "upload";
@@ -244,6 +246,10 @@ export function AppShell({
   const [courseValue, setCourseValue] = useState("");
   const [lectureTitle, setLectureTitle] = useState("");
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
+  const [recoverableSession, setRecoverableSession] = useState<RecordingSessionMeta | null>(null);
+  const [isCompanionRecording, setIsCompanionRecording] = useState(false);
+  const recordingJournalRef = useRef<RecordingJournal | null>(null);
+  const recordingSecondsRef = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -264,6 +270,60 @@ export function AppShell({
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, [profile.fullName]);
+
+  useEffect(() => {
+    // Check for recoverable unfinalized recordings from previous crashes/browser closes
+    void RecordingJournal.checkRecoverableSession().then((result) => {
+      if (result.hasRecoverable && result.meta) {
+        setRecoverableSession(result.meta);
+      }
+    });
+
+    // Check upcoming timetable events and exam reminders
+    const checkReminders = () => {
+      fetch("/api/notifications/reminders", { method: "POST" }).catch(() => {});
+    };
+    checkReminders();
+    const reminderInterval = window.setInterval(checkReminders, 180_000);
+    return () => window.clearInterval(reminderInterval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "setAppBadge" in navigator) {
+      const unreadCount = notifications.filter((n) => !n.read_at).length;
+      if (unreadCount > 0) {
+        navigator.setAppBadge(unreadCount).catch(() => {});
+      } else {
+        navigator.clearAppBadge().catch(() => {});
+      }
+    }
+  }, [notifications]);
+
+  const recoverRecording = useCallback(async () => {
+    try {
+      const { blob, meta } = await RecordingJournal.restoreRecoverableBlob();
+      if (blob && meta) {
+        setRecordedBlob(blob);
+        setLectureTitle(meta.title || "Recovered Lecture");
+        if (meta.courseId) setCourseValue(meta.courseId);
+        setRecordingSeconds(meta.totalDurationSeconds || 60);
+        recordingSecondsRef.current = meta.totalDurationSeconds || 60;
+        setModal("capture");
+        setSourceTab("record");
+        setRecoverableSession(null);
+        showToast("Recovered unsaved lecture recording! Review and save it below.", "success");
+      }
+    } catch {
+      showToast("Could not restore recording chunks.", "error");
+    }
+  }, [showToast]);
+
+  const discardRecoveredRecording = useCallback(async () => {
+    const journal = new RecordingJournal();
+    await journal.clearActiveSession();
+    setRecoverableSession(null);
+    showToast("Interrupted recording discarded.", "info");
+  }, [showToast]);
 
   useEffect(() => {
     const requestedView = params.get("view") as View | null;
@@ -320,7 +380,7 @@ export function AppShell({
               && Date.now() - Date.parse(item.created_at) < 2 * 60 * 60 * 1000);
           const callInfo = newCall?.body.match(/\[call:([0-9a-f-]{36}):([0-9a-f-]{36})\]/i);
           if (callInfo) {
-            router.push(`/app?view=study-groups&group=${callInfo[1]}&call=${callInfo[2]}`);
+            router.push(newCall?.action_url || `/app?view=study-groups&group=${callInfo[1]}&call=${callInfo[2]}`);
             setView("study-groups");
           }
         }
@@ -338,6 +398,19 @@ export function AppShell({
     const timeout = window.setTimeout(() => setToast(null), toast.tone === "error" ? 5200 : 3200);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  // Update document title with persistent recording indicator
+  useEffect(() => {
+    if (isRecording) {
+      const mins = Math.floor(recordingSeconds / 60);
+      const secs = (recordingSeconds % 60).toString().padStart(2, "0");
+      const prevTitle = document.title;
+      document.title = `🔴 Recording (${mins}:${secs}) — StudyStation`;
+      return () => {
+        document.title = "StudyStation · AI study companion";
+      };
+    }
+  }, [isRecording, recordingSeconds]);
 
   // Update background recording session metadata when lecture title changes
   useEffect(() => {
@@ -396,6 +469,20 @@ export function AppShell({
 
   async function startRecording() {
     try {
+      const companionAvailable = await WindowsCompanionClient.isAvailable();
+      if (companionAvailable) {
+        const started = await WindowsCompanionClient.startRecording(lectureTitle.trim() || "Lecture Recording");
+        if (started) {
+          setIsCompanionRecording(true);
+          setIsRecording(true);
+          setIsRecordingPaused(false);
+          recordingPausedRef.current = false;
+          setRecordingSeconds(0);
+          showToast("Recording started with native Windows Audio Service (sleep & lock safe).", "success");
+          return;
+        }
+      }
+
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
         showToast("Live recording isn’t supported in this browser. Try uploading a file instead.", "error");
         return;
@@ -417,6 +504,8 @@ export function AppShell({
       stream.getAudioTracks().forEach((track) => {
         track.onended = () => {
           console.warn("[Recording] Audio track ended unexpectedly.");
+          showToast("Microphone disconnected. Recording paused.", "error");
+          pauseRecording();
         };
         track.onmute = () => {
           console.warn("[Recording] Audio track muted by system/phone sleep.");
@@ -440,8 +529,15 @@ export function AppShell({
       );
       const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
 
+      const journal = new RecordingJournal();
+      recordingJournalRef.current = journal;
+      await journal.initSession(lectureTitle.trim() || "Lecture Recording", courseValue || null, preferredType || "audio/webm");
+
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+          void journal.appendChunk(event.data, recordingSecondsRef.current);
+        }
       };
 
       recorder.onstop = () => {
@@ -452,6 +548,7 @@ export function AppShell({
         setIsRecording(false);
         setIsRecordingPaused(false);
         recordingPausedRef.current = false;
+        void journal.markCompleted();
       };
 
       // Resilient auto-resume if OS pauses recorder on phone sleep/lock unexpectedly
@@ -490,6 +587,7 @@ export function AppShell({
         },
         onStateChange: ({ elapsedSeconds, isWakeLockActive: wakeActive }) => {
           setRecordingSeconds(elapsedSeconds);
+          recordingSecondsRef.current = elapsedSeconds;
           setIsWakeLockActive(wakeActive);
         },
       });
@@ -555,6 +653,12 @@ export function AppShell({
   }
 
   function pauseRecording() {
+    if (isCompanionRecording) {
+      void WindowsCompanionClient.pauseRecording();
+      recordingPausedRef.current = true;
+      setIsRecordingPaused(true);
+      return;
+    }
     if (mediaRecorderRef.current?.state !== "recording") return;
     backgroundRecordingRef.current?.pause();
     mediaRecorderRef.current.pause();
@@ -565,6 +669,12 @@ export function AppShell({
   }
 
   function resumeRecording() {
+    if (isCompanionRecording) {
+      void WindowsCompanionClient.resumeRecording();
+      recordingPausedRef.current = false;
+      setIsRecordingPaused(false);
+      return;
+    }
     if (mediaRecorderRef.current?.state !== "paused") return;
     backgroundRecordingRef.current?.resume();
     mediaRecorderRef.current.resume();
@@ -581,6 +691,20 @@ export function AppShell({
   }
 
   function stopRecording() {
+    if (isCompanionRecording) {
+      void (async () => {
+        const blob = await WindowsCompanionClient.stopRecording();
+        setIsRecording(false);
+        setIsRecordingPaused(false);
+        setIsCompanionRecording(false);
+        if (blob) {
+          setRecordedBlob(blob);
+        } else {
+          showToast("Could not retrieve companion recording.", "error");
+        }
+      })();
+      return;
+    }
     backgroundRecordingRef.current?.stop();
     setIsWakeLockActive(false);
     if (recognitionRef.current) {
@@ -706,6 +830,8 @@ export function AppShell({
         setAutoOpenLectureId(created.lectureId);
         setLectureTitle("");
         setRecordedBlob(null);
+        void recordingJournalRef.current?.clearActiveSession();
+        setRecoverableSession(null);
         showToast("Long lecture uploaded. Transcription is running in parts — open the lecture to watch progress.", "info");
         router.refresh();
         return;
@@ -760,6 +886,8 @@ export function AppShell({
       setView("lectures");
       setAutoOpenLectureId(created.lectureId);
       setRecordedBlob(null);
+      void recordingJournalRef.current?.clearActiveSession();
+      setRecoverableSession(null);
       setLectureTitle("");
       router.refresh();
     } catch (error) {
@@ -1076,6 +1204,10 @@ export function AppShell({
                       <button type="button" key={item.id} onClick={() => {
                         setNotificationsOpen(false);
                         const callInfo = item.type === "study_group_call" ? item.body.match(/\[call:([0-9a-f-]{36}):([0-9a-f-]{36})\]/i) : null;
+                        if (item.action_url) {
+                          router.push(item.action_url);
+                          return;
+                        }
                         if (callInfo) router.push(`/app?view=study-groups&group=${callInfo[1]}&call=${callInfo[2]}`);
                         navigate("study-groups");
                       }} className={`block w-full rounded-xl border p-2.5 text-left ${item.read_at ? "border-[#eeeaf5] bg-[#faf9fd]" : "border-[#dcd4ff] bg-[#f5f2ff]"}`}>
@@ -1115,6 +1247,40 @@ export function AppShell({
 
         {/* View Router */}
         <main className="mx-auto max-w-[1440px] px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8">
+          {recoverableSession && (
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
+                  <AudioLines className="size-5 animate-pulse" />
+                </span>
+                <div>
+                  <p className="text-xs font-extrabold text-amber-950">
+                    Interrupted Recording Recovered ({Math.max(1, Math.round(recoverableSession.totalDurationSeconds / 60))} min)
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    StudyStation preserved your unsaved recording: &ldquo;{recoverableSession.title}&rdquo;.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => void recoverRecording()}
+                  className="rounded-xl bg-[#7259e8] px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#8069ed]"
+                >
+                  Recover & Upload
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void discardRecoveredRecording()}
+                  className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100/50"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
+
           {view === "dashboard" && (
             <Stage6Dashboard
               data={liveDashboard}

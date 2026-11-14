@@ -8,6 +8,8 @@ import { signOut } from "@/app/auth/actions";
 import { saveProfile } from "@/app/app/profile-actions";
 import { createClient } from "@/lib/supabase/client";
 import type { ThemePreference } from "@/components/theme-provider";
+import { NotificationPreferences } from "@/components/notification-preferences";
+import { WindowsIntegrationSettings } from "@/components/windows-integration-settings";
 
 type ProfileSettingsData = {
   fullName: string;
@@ -181,6 +183,10 @@ export function ProfileSettings({
           <button key={value} type="button" onClick={() => onThemeChange(value)} aria-pressed={theme === value} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-bold transition ${theme === value ? "border-[#b9acef] bg-[#f3f0ff] text-[#624bc7]" : "border-[#e9e5ef] text-[#625b6d] hover:bg-[#faf9fc]"}`}><Icon className="size-4" />{label}</button>)}
       </div>
     </section>
+
+    <NotificationPreferences />
+
+    <WindowsIntegrationSettings />
 
     {profile.email?.toLowerCase() === "studystation.support@gmail.com" && (
       <section className="profile-panel rounded-[24px] border border-indigo-200 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 p-5 sm:p-7">

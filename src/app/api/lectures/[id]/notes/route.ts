@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateOrganizedNote } from "@/lib/note-generator";
+import { dispatchNotification } from "@/lib/notifications/service";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -137,6 +138,17 @@ export async function POST(request: Request, context: RouteContext) {
       error: "Organized notes were generated, but could not be saved to your database. Please retry.",
     }, { status: 500 });
   }
+
+  void dispatchNotification({
+    userIds: [user.id],
+    type: "recording_complete",
+    title: "Lecture notes ready",
+    body: `Notes and summary are ready for "${lecture.title}".`,
+    actionUrl: `/app?view=lectures&lecture=${lecture.id}`,
+    dedupeKeyPrefix: `recording_complete:${lecture.id}`,
+    actions: [{ action: "open", title: "View notes" }],
+    tag: `lecture-notes-${lecture.id}`,
+  }).catch((err) => console.warn("Failed to dispatch lecture completion notification:", err));
 
   return NextResponse.json({
     success: true,

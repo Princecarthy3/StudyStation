@@ -387,10 +387,43 @@ export const notifications = pgTable("notifications", {
   type: text("type").notNull(),
   title: text("title").notNull(),
   body: text("body").notNull(),
+  dedupeKey: text("dedupe_key"),
+  actionUrl: text("action_url"),
   readAt: timestamp("read_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("notifications_user_created_idx").on(table.userId, table.createdAt),
+]);
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: uuid("user_id").primaryKey(),
+  enabled: boolean("enabled").default(true).notNull(),
+  categories: jsonb("categories").$type<Record<string, boolean>>().default({
+    assignments: true,
+    calls: true,
+    classes: true,
+    groups: true,
+    messages: true,
+    recordings: true,
+    system: true,
+    study: true,
+  }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("push_subscriptions_user_endpoint_idx").on(table.userId, table.endpoint),
+  index("push_subscriptions_user_idx").on(table.userId),
 ]);
 
 export const studentReviews = pgTable("student_reviews", {

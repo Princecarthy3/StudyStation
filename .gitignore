@@ -34,3 +34,9 @@ yarn-error.log*
 
 # Vercel
 .vercel
+
+# Windows Build & .NET
+.dotnet/
+windows/dist/
+windows/**/bin/
+windows/**/obj/

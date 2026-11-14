@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyGroupOwnerOfJoin } from "@/lib/study-groups/notifications";
+import { sendPushNotification } from "@/lib/notifications/push";
+import { dispatchNotification } from "@/lib/notifications/service";
 import { getJitsiDomain } from "@/lib/calls/jitsi";
 
 export const runtime = "nodejs";
@@ -379,8 +381,24 @@ export async function POST(request: Request, context: RouteContext) {
         type: "study_group_call",
         title: "Group call started",
         body: `${group.name} has started a group call. [call:${id}:${session.id}]`,
+        action_url: `/app?view=study-groups&group=${id}&call=${session.id}`,
+        dedupe_key: `study-group-call:${session.id}:${member.user_id}`,
       })));
       if (notificationError) console.error("Group call notifications failed", { code: notificationError.code });
+      else {
+        await sendPushNotification(members.map((member) => member.user_id), {
+          type: "study_group_call",
+          title: "Group call started",
+          body: `${group.name} has started a group call.`,
+          url: `/app?view=study-groups&group=${id}&call=${session.id}`,
+          actions: [
+            { action: "join", title: "Join call" },
+            { action: "open", title: "Open" },
+          ],
+          tag: `study-group-call:${session.id}`,
+          requireInteraction: true,
+        });
+      }
     }
     return NextResponse.json({ session }, { status: 201 });
   }
@@ -402,6 +420,30 @@ export async function POST(request: Request, context: RouteContext) {
       } catch (msgErr) {
         console.warn("Could not post call end message:", msgErr);
       }
+
+      void (async () => {
+        try {
+          const { data: otherMembers } = await admin
+            .from("group_members")
+            .select("user_id")
+            .eq("group_id", id)
+            .neq("user_id", auth.user.id);
+          if (otherMembers && otherMembers.length > 0) {
+            await dispatchNotification({
+              userIds: otherMembers.map((m) => m.user_id),
+              type: "missed_call",
+              title: "Study Call Ended",
+              body: `The study call in ${group.name} has concluded. Check group chat for updates.`,
+              actionUrl: `/app?view=study-groups&group=${id}`,
+              actions: [{ action: "open", title: "View group" }],
+              dedupeKeyPrefix: `call-ended:${sessionId}`,
+              tag: `study-group-call-${sessionId}`,
+            });
+          }
+        } catch (err) {
+          console.warn("[StudyGroups] Failed to dispatch call ended notification:", err);
+        }
+      })();
     }
     return NextResponse.json({ success: true });
   }
@@ -425,6 +467,37 @@ export async function POST(request: Request, context: RouteContext) {
       data = (await admin.from("group_messages").insert({ group_id: id, sender_id: auth.user.id, body: message }).select("id, sender_id, body, created_at").single()).data;
     }
     if (!data) return fail("Your message could not be sent.", 500);
+
+    void (async () => {
+      try {
+        const { data: others } = await admin
+          .from("group_members")
+          .select("user_id")
+          .eq("group_id", id)
+          .neq("user_id", auth.user.id);
+        if (others && others.length > 0) {
+          const { data: senderProfile } = await admin
+            .from("profiles")
+            .select("full_name")
+            .eq("id", auth.user.id)
+            .maybeSingle();
+          const senderName = senderProfile?.full_name?.trim() || "A member";
+          await dispatchNotification({
+            userIds: others.map((m) => m.user_id),
+            type: "message",
+            title: group.name,
+            body: `${senderName}: ${message.length > 120 ? message.slice(0, 117) + "…" : message}`,
+            actionUrl: `/app?view=study-groups&group=${id}`,
+            actions: [{ action: "open", title: "View message" }],
+            dedupeKeyPrefix: `group-msg:${data.id}`,
+            tag: `study-group-${id}`,
+          });
+        }
+      } catch (err) {
+        console.warn("[StudyGroups] Failed to dispatch message notification:", err);
+      }
+    })();
+
     return NextResponse.json({
       message: { id: data.id, body: data.body, created_at: data.created_at, isMine: true, status: "delivered", replyToId: replyToId || null },
     }, { status: 201 });

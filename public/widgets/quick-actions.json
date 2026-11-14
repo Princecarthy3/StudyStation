@@ -1,0 +1,71 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "Image",
+              "url": "${$root.siteUrl}/icons/icon-192.png",
+              "size": "Small",
+              "style": "Person"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "StudyStation",
+              "weight": "Bolder",
+              "size": "Medium",
+              "color": "Accent"
+            },
+            {
+              "type": "TextBlock",
+              "text": "Quick Actions",
+              "spacing": "None",
+              "isSubtle": true,
+              "size": "Small"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ActionSet",
+      "spacing": "Medium",
+      "actions": [
+        {
+          "type": "Action.OpenUrl",
+          "title": "🎙️ Start Recording",
+          "url": "${$root.siteUrl}/app?action=record",
+          "style": "positive"
+        },
+        {
+          "type": "Action.OpenUrl",
+          "title": "📅 Open Timetable",
+          "url": "${$root.siteUrl}/app?view=planner"
+        },
+        {
+          "type": "Action.OpenUrl",
+          "title": "📝 Create Reminder",
+          "url": "${$root.siteUrl}/app?view=planner&action=new-task"
+        },
+        {
+          "type": "Action.OpenUrl",
+          "title": "⚡ Open StudyStation",
+          "url": "${$root.siteUrl}/app"
+        }
+      ]
+    }
+  ]
+}

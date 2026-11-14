@@ -15,7 +15,7 @@ export async function GET() {
   try { auth = await getUser(); } catch { return NextResponse.json({ error: "Notifications are unavailable." }, { status: 503 }); }
   if (!auth) return NextResponse.json({ error: "Sign in to view notifications." }, { status: 401 });
   const { data, error } = await auth.supabase.from("notifications")
-    .select("id, type, title, body, read_at, created_at")
+    .select("id, type, title, body, action_url, read_at, created_at")
     .eq("user_id", auth.user.id)
     .order("created_at", { ascending: false })
     .limit(30);

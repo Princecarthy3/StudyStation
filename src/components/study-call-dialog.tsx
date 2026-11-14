@@ -173,6 +173,20 @@ export function StudyCallDialog({
   const clientIdRef = useRef<string>("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const remoteAnalysersRef = useRef<Map<string, () => void>>(new Map());
+  const reconnectTimersRef = useRef<Map<string, number>>(new Map());
+
+  // Prevent Windows display sleep / suspension during active call
+  useEffect(() => {
+    let sentinel: WakeLockSentinel | null = null;
+    if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
+      navigator.wakeLock.request("screen").then((s) => {
+        sentinel = s;
+      }).catch(() => {});
+    }
+    return () => {
+      if (sentinel) void sentinel.release().catch(() => {});
+    };
+  }, []);
 
   // Duration timer
   useEffect(() => {
@@ -368,11 +382,34 @@ export function StudyCallDialog({
       };
 
       pc.onconnectionstatechange = () => {
-        if (
-          pc.connectionState === "disconnected" ||
-          pc.connectionState === "failed" ||
-          pc.connectionState === "closed"
-        ) {
+        if (pc.connectionState === "connected") {
+          const pending = reconnectTimersRef.current.get(remotePeerId);
+          if (pending) {
+            window.clearTimeout(pending);
+            reconnectTimersRef.current.delete(remotePeerId);
+          }
+        } else if (pc.connectionState === "disconnected") {
+          // 8-second grace period for WiFi switch, app minimization, or brief packet loss
+          if (!reconnectTimersRef.current.has(remotePeerId)) {
+            const timer = window.setTimeout(() => {
+              reconnectTimersRef.current.delete(remotePeerId);
+              if (pc.connectionState !== "connected") {
+                removePeer(remotePeerId);
+              }
+            }, 8000);
+            reconnectTimersRef.current.set(remotePeerId, timer);
+          }
+        } else if (pc.connectionState === "failed") {
+          if (typeof (pc as unknown as { restartIce?: () => void }).restartIce === "function") {
+            try {
+              (pc as unknown as { restartIce: () => void }).restartIce();
+            } catch {
+              removePeer(remotePeerId);
+            }
+          } else {
+            removePeer(remotePeerId);
+          }
+        } else if (pc.connectionState === "closed") {
           removePeer(remotePeerId);
         }
       };

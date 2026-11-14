@@ -170,6 +170,12 @@ Stage 11 replaces the sample planner schedule and quiz-results screen with owner
 
 Quiz attempts are scored server-side from a completed quiz generation owned by the signed-in student. The browser submits one selected option for each question; the API validates the generation and answer shape, calculates the score from stored correct answers, then stores the result in `quizzes` and `quiz_attempts`. Notification delivery is not configured, and the app explicitly does not claim that reminders are sent. The progress page shows exact counts for completed tasks, ready lecture transcripts, and saved quiz attempts, plus the average of up to ten recent attempts. Flashcard review counts and study-session attendance are not shown because those activities are not tracked.
 
+### Browser notifications
+
+Phase 1 adds browser push subscription support while preserving the existing in-app notification center. Apply [`20261114000000_windows_notifications_phase1.sql`](./supabase/migrations/20261114000000_windows_notifications_phase1.sql), generate a VAPID key pair with `npx web-push generate-vapid-keys`, and set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and `NEXT_PUBLIC_VAPID_PUBLIC_KEY` in the deployment environment. Users enable device notifications from Profile & settings; category preferences are stored per account, expired subscriptions are removed automatically, and notification action URLs are constrained to the StudyStation origin by the service worker.
+
+This is the browser/PWA foundation only. It does not provide guaranteed Windows push delivery while the app is terminated, native Windows App SDK notification activation, or background microphone recording. Those require the separate Windows package/native companion described in the Windows integration audit.
+
 ### Manual Study Planner and Progress check
 
 After applying the Stage 4 and Stage 11 migrations, configuring Supabase and the server-only service-role key, and signing in:
