@@ -66,8 +66,8 @@ export function WindowsIntegrationSettings() {
     }
   }
 
-  // Only render on Windows machines AND when installed as standalone app (or when startup is configurable)
-  if (!mounted || !isWindowsOS || !isStandaloneApp) {
+  // Keep visible on Windows machines (both browser and installed app) so users can see and configure their Windows 11 widgets
+  if (!mounted || !isWindowsOS) {
     return null;
   }
 
