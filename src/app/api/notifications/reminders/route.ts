@@ -34,7 +34,25 @@ export async function POST(request: Request) {
   const nextHour = new Date(now.getTime() + 60 * 60 * 1000);
   const next24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
+  let isTest = false;
+  try {
+    const json = await request.clone().json() as { test?: boolean };
+    isTest = Boolean(json?.test);
+  } catch {}
+
   let remindersSent = 0;
+
+  if (isTest) {
+    await dispatchNotification({
+      userIds: [user.id],
+      type: "announcement",
+      title: "StudyStation Notifications Active 🔔",
+      body: "Mobile and desktop push notifications are working properly on this device!",
+      actionUrl: "/app?view=planner",
+      tag: `test-${Date.now()}`,
+    });
+    remindersSent += 1;
+  }
 
   // 1. Timetable events starting within the next 45 minutes
   const in45Minutes = new Date(now.getTime() + 45 * 60 * 1000);
