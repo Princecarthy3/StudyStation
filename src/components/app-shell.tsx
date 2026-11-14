@@ -75,6 +75,7 @@ import { PdfPageViewer } from "@/components/pdf-page-viewer";
 import { ProfileSettings } from "@/components/profile-settings";
 import { useTheme } from "@/components/theme-provider";
 import { useInstallApp } from "@/components/install-app";
+import { NetworkStatusBanner, PullToRefresh } from "@/components/network-and-refresh";
 import {
   LectureStudio,
   Stage6Courses,
@@ -1038,6 +1039,7 @@ export function AppShell({
 
   return (
     <div className="workspace-shell min-h-screen overflow-x-clip bg-[#f7f6fb] text-[#17132d]">
+      <NetworkStatusBanner />
       {sidebarOpen && (
         <button
           aria-label="Close navigation"
@@ -1258,6 +1260,7 @@ export function AppShell({
         </header>
 
         {/* View Router */}
+        <PullToRefresh>
         <main className="mx-auto max-w-[1440px] px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8">
           {recoverableSession && (
             <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm">
@@ -1415,6 +1418,7 @@ export function AppShell({
             />
           )}
         </main>
+        </PullToRefresh>
       </div>
 
       {/* Mobile Floating Bottom Bar */}
