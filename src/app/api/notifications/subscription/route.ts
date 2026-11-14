@@ -9,6 +9,19 @@ async function getAuth() {
   return error || !user ? null : { supabase, user };
 }
 
+export async function GET() {
+  let auth;
+  try {
+    auth = await getAuth();
+  } catch {
+    return NextResponse.json({ error: "Push subscriptions are unavailable." }, { status: 503 });
+  }
+  if (!auth) return NextResponse.json({ error: "Sign in to enable notifications." }, { status: 401 });
+
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim() || "";
+  return NextResponse.json({ publicKey });
+}
+
 export async function POST(request: Request) {
   let auth;
   try {

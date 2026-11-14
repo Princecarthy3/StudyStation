@@ -58,7 +58,14 @@ export function NotificationPreferences() {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") throw new Error("Browser notification permission was not granted.");
         const registration = await navigator.serviceWorker.ready;
-        const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        let publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!publicKey) {
+          const configRes = await fetch("/api/notifications/subscription");
+          if (configRes.ok) {
+            const configData = await configRes.json() as { publicKey?: string };
+            publicKey = configData.publicKey;
+          }
+        }
         if (!publicKey) throw new Error("Push notifications are not configured for this deployment.");
         const padding = "=".repeat((4 - (publicKey.length % 4)) % 4);
         const normalizedKey = publicKey.replace(/-/g, "+").replace(/_/g, "/") + padding;
