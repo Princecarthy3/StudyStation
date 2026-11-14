@@ -288,8 +288,8 @@ export function AppShell({
       }).catch(() => undefined);
     };
     checkReminders();
-    // Every 2 minutes while the app is open so due tasks still fire without relying only on cron.
-    const reminderInterval = window.setInterval(checkReminders, 120_000);
+    // Frequent while the app is open: Vercel Hobby only allows a daily cron, so the open app must drive due alerts.
+    const reminderInterval = window.setInterval(checkReminders, 60_000);
     const onVisible = () => {
       if (document.visibilityState === "visible") checkReminders();
     };
