@@ -1205,9 +1205,9 @@ export function AppShell({
               </button>
 
               {notificationsOpen && (
-                <div className="glass-panel absolute right-0 top-12 z-50 w-[min(20rem,calc(100vw-1.5rem))] min-w-[16rem] max-w-[calc(100vw-1.5rem)] rounded-[24px] p-4 shadow-[0_20px_60px_rgba(35,28,68,.16)]">
-                  <div className="flex items-center justify-between border-b border-[#f0edf5] pb-2.5">
-                    <b className="text-xs font-black text-[#17132d]">Notifications</b>
+                <div className="glass-panel fixed left-3 right-3 top-[4.5rem] z-50 max-h-[min(72vh,34rem)] overflow-x-hidden overflow-y-auto rounded-[24px] p-4 shadow-[0_20px_60px_rgba(35,28,68,.16)] sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-[22rem] sm:max-w-[min(22rem,calc(100vw-1.5rem))]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#f0edf5] pb-2.5">
+                    <b className="min-w-0 text-xs font-black text-[#17132d]">Notifications</b>
                     <span className="text-[10px] font-extrabold text-[#7259e8]">
                       {notifications.filter((item) => !item.read_at).length} unread
                     </span>
@@ -1224,8 +1224,8 @@ export function AppShell({
                         }
                         if (callInfo) router.push(`/app?view=study-groups&group=${callInfo[1]}&call=${callInfo[2]}`);
                         navigate("study-groups");
-                      }} className={`block w-full rounded-xl border p-2.5 text-left ${item.read_at ? "border-[#eeeaf5] bg-[#faf9fd]" : "border-[#dcd4ff] bg-[#f5f2ff]"}`}>
-                        <p className="text-[11px] font-extrabold text-[#17132d]">{item.title}</p>
+                      }} className={`block w-full min-w-0 rounded-xl border p-2.5 text-left ${item.read_at ? "border-[#eeeaf5] bg-[#faf9fd]" : "border-[#dcd4ff] bg-[#f5f2ff]"}`}>
+                        <p className="break-words text-[11px] font-extrabold text-[#17132d]">{item.title}</p>
                         <p className="mt-0.5 break-words text-[9px] leading-4 text-[#777183]">{item.body.replace(/\s*\[call:[0-9a-f-]{36}:[0-9a-f-]{36}\]/i, "")}</p>
                         <time className="mt-1 block text-[8px] font-bold text-[#96909f]">{new Date(item.created_at).toLocaleString()}</time>
                       </button>
