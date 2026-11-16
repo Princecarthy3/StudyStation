@@ -152,23 +152,29 @@ export function NotificationPreferences() {
                 // 1. Play audible notification sound chime immediately
                 playNotificationChime();
 
-                // 2. Ensure device is registered in push_subscriptions
+                // 2. Ensure device is registered in push_subscriptions on server
                 await ensurePushSubscription(true);
 
-                // 3. Trigger immediate native toast banner via Service Worker
+                // 3. Directly trigger native toast banner on this device
                 if ("serviceWorker" in navigator) {
                   const reg = await navigator.serviceWorker.ready;
-                  if (reg && reg.active) {
-                    reg.active.postMessage({
-                      type: "SHOW_NOTIFICATION",
-                      payload: {
-                        title: "StudyStation Study Reminder",
-                        body: "Notification banners & sounds are active on this device! Your upcoming classes and tasks will appear here.",
-                        tag: `test-${Date.now()}`,
-                        actions: [{ action: "open", title: "Open StudyStation" }],
-                      },
-                    });
-                  }
+                  const icon = new URL("/icons/icon-192.png", window.location.origin).href;
+                  const badge = new URL("/icons/icon-192.png", window.location.origin).href;
+                  await reg.showNotification("StudyStation", {
+                    body: "Notification banners & sounds are active on this device! Upcoming classes and study tasks will appear here.",
+                    icon,
+                    badge,
+                    tag: `studystation-test-${Date.now()}`,
+                    renotify: true,
+                    requireInteraction: true,
+                    silent: false,
+                    data: { url: "/app" },
+                  } as unknown as NotificationOptions);
+                } else if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                  new Notification("StudyStation", {
+                    body: "Notification banners & sounds are active on this device! Upcoming classes and study tasks will appear here.",
+                    icon: new URL("/icons/icon-192.png", window.location.origin).href,
+                  });
                 }
 
                 // 4. Send backend push test to exercise server pipeline
@@ -178,7 +184,7 @@ export function NotificationPreferences() {
                   body: JSON.stringify({ test: true }),
                 });
 
-                setMessage("Notification banner & chime sent! Check your screen.");
+                setMessage("Notification sent! If you don't see the banner popup, check Do Not Disturb (Win + N) or Windows Settings.");
               } catch (e) {
                 setError(e instanceof Error ? e.message : "Failed to trigger notification");
               } finally {
