@@ -67,10 +67,10 @@ export async function sendPushNotification(userIds: string[], notification: Push
     // No row yet → allow all categories (matches API defaults).
     if (!preference) return true;
     if (preference.enabled === false) return false;
-    const categories = (preference.categories ?? {}) as Record<string, boolean>;
-    // Explicit false/0/"false" blocks; missing key stays allowed (same as defaults).
+    const categories = (preference.categories ?? {}) as Record<string, unknown>;
+    // Explicit false blocks; missing key stays allowed (same as defaults).
     const value = categories[category];
-    if (value === false || value === 0 || value === "false") return false;
+    if (value === false || value === "false" || value === 0) return false;
     return true;
   });
   if (!eligibleUserIds.length) return;
