@@ -44,6 +44,7 @@
       "type": "ColumnSet",
       "spacing": "Medium",
       "separator": true,
+      "$when": "${$root.isAuthenticated}",
       "columns": [
         {
           "type": "Column",
@@ -52,7 +53,7 @@
           "items": [
             {
               "type": "TextBlock",
-              "text": "${$root.studyHours}",
+              "text": "${if($root.studyHours, $root.studyHours, '0')}",
               "size": "ExtraLarge",
               "weight": "Bolder",
               "color": "Accent",
@@ -75,7 +76,7 @@
           "items": [
             {
               "type": "TextBlock",
-              "text": "${$root.completedTasks}",
+              "text": "${if($root.completedTasks, $root.completedTasks, '0')}",
               "size": "ExtraLarge",
               "weight": "Bolder",
               "color": "Good",
@@ -98,7 +99,7 @@
           "items": [
             {
               "type": "TextBlock",
-              "text": "${$root.readyLectures}",
+              "text": "${if($root.readyLectures, $root.readyLectures, '0')}",
               "size": "ExtraLarge",
               "weight": "Bolder",
               "horizontalAlignment": "Center"
@@ -118,13 +119,30 @@
     {
       "type": "Container",
       "spacing": "Medium",
+      "$when": "${$root.isAuthenticated}",
       "items": [
         {
           "type": "TextBlock",
-          "text": "${$root.progressMotivator}",
+          "text": "${if($root.progressMotivator, $root.progressMotivator, 'Keep going!')}",
           "size": "Small",
           "wrap": true,
           "isSubtle": true
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "spacing": "Medium",
+      "separator": true,
+      "$when": "${$root.isAuthenticated == false}",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "Sign in to StudyStation to track your study hours, completed tasks, and lecture recordings.",
+          "wrap": true,
+          "isSubtle": true,
+          "size": "Small",
+          "horizontalAlignment": "Center"
         }
       ]
     }

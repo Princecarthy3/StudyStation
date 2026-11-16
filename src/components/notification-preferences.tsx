@@ -131,36 +131,57 @@ export function NotificationPreferences() {
     {!isPushSupported() && <p className="mt-4 rounded-xl bg-[#fff7e8] px-3 py-2 text-xs text-[#8b682d]">Push notifications are not supported in this browser. In-app notifications remain available.</p>}
     {isPushSupported() && Notification.permission !== "granted" && <button type="button" disabled={busy} onClick={() => void save(preferences, true)} className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-3 text-xs font-extrabold text-white disabled:opacity-60"><Check className="size-3.5" />Enable notifications on this device</button>}
     {isPushSupported() && Notification.permission === "granted" && (
-      <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-purple-50/60 border border-purple-100 p-3">
-        <div className="text-[11px] text-[#5b47bd]">
-          Push notifications are active on this device.
+      <>
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-purple-50/60 border border-purple-100 p-3">
+          <div className="text-[11px] text-[#5b47bd]">
+            Push notifications are active on this device.
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setMessage("");
+              setError("");
+              try {
+                const res = await fetch("/api/notifications/reminders", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ test: true }),
+                });
+                if (!res.ok) throw new Error("Could not send test notification");
+                setMessage("Test notification sent! Check your notification center.");
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Failed to trigger notification");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="shrink-0 rounded-lg bg-white border border-[#7259e8]/30 px-3 py-1.5 text-xs font-bold text-[#7259e8] hover:bg-purple-50 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+          >
+            Send Test Notification
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setMessage("");
-            setError("");
-            try {
-              const res = await fetch("/api/notifications/reminders", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ test: true }),
-              });
-              if (!res.ok) throw new Error("Could not send test notification");
-              setMessage("Test notification sent! Check your notification center.");
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Failed to trigger notification");
-            } finally {
-              setBusy(false);
-            }
-          }}
-          className="shrink-0 rounded-lg bg-white border border-[#7259e8]/30 px-3 py-1.5 text-xs font-bold text-[#7259e8] hover:bg-purple-50 active:scale-95 transition-all shadow-sm disabled:opacity-50"
-        >
-          Send Test Notification
-        </button>
-      </div>
+
+        {typeof window !== "undefined" && /Win/i.test(navigator.userAgent) && (
+          <div className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-[11px] text-amber-900">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <p className="font-bold text-amber-950">🔊 Windows Sound &amp; Banners Setup</p>
+                <p className="mt-0.5 text-amber-800 text-[10px] leading-relaxed">
+                  To hear notification sounds and see banner pop-ups on Windows, ensure &ldquo;Show notification banners&rdquo; and &ldquo;Play a sound&rdquo; are turned ON for <strong>StudyStation</strong> or <strong>Microsoft Edge</strong> in Windows Settings.
+                </p>
+              </div>
+              <a
+                href="ms-settings:notifications"
+                className="shrink-0 inline-flex items-center justify-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition-colors shadow-sm"
+              >
+                Open Windows Settings
+              </a>
+            </div>
+          </div>
+        )}
+      </>
     )}
     {error && <p role="alert" className="mt-4 rounded-xl bg-[#fff1ef] px-3 py-2 text-xs text-[#a44e48]">{error}</p>}
     {message && <p role="status" className="mt-4 rounded-xl bg-[#f1efff] px-3 py-2 text-xs text-[#5b47bd]">{message}</p>}

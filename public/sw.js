@@ -1,4 +1,4 @@
-const CACHE_NAME = "studystation-public-v3";
+const CACHE_NAME = "studystation-public-v4";
 const STATIC_ASSETS = [
   "/offline.html",
   "/logo.png",
@@ -58,10 +58,13 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, {
     body,
     tag: typeof payload.tag === "string" ? payload.tag : undefined,
-    renotify: Boolean(payload.renotify),
+    renotify: true,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    requireInteraction: Boolean(payload.requireInteraction),
+    requireInteraction: payload.requireInteraction !== undefined ? Boolean(payload.requireInteraction) : true,
+    silent: false,
+    vibrate: [200, 100, 200],
+    timestamp: Date.now(),
     actions,
     data,
   }));

@@ -41,6 +41,14 @@
       ]
     },
     {
+      "type": "TextBlock",
+      "text": "Your AI-powered study companion",
+      "wrap": true,
+      "isSubtle": true,
+      "size": "Small",
+      "spacing": "Medium"
+    },
+    {
       "type": "ActionSet",
       "spacing": "Medium",
       "actions": [

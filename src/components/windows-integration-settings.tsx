@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Monitor, Check, ExternalLink, HardDrive, LayoutGrid, Power } from "lucide-react";
+import { Monitor, Check, ExternalLink, HardDrive, LayoutGrid, Power, Volume2 } from "lucide-react";
 import { WindowsCompanionClient } from "@/lib/windows-companion-client";
 
 interface RunOnOsLoginAPI {
@@ -133,6 +133,27 @@ export function WindowsIntegrationSettings() {
               </p>
               <p className="mt-2 text-[10px] text-[#9993a0]">
                 Press <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border text-[10px] font-mono">Win + W</kbd> to open the Widgets Board and click <strong>+</strong> to pin StudyStation widgets.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Windows Notification Sounds & Banner Toasts */}
+        <div className="rounded-xl border border-[#eeeaf4] p-3.5">
+          <div className="flex items-start gap-3">
+            <Volume2 className="size-4 text-[#7259e8] mt-0.5" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-[#4e485b]">Notification Sound &amp; Banner Banners</p>
+                <a
+                  href="ms-settings:notifications"
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-[#7259e8] hover:underline"
+                >
+                  Configure in Windows <ExternalLink className="size-2.5" />
+                </a>
+              </div>
+              <p className="mt-1 text-[11px] text-[#85808d]">
+                Windows controls sound and popup banners per application. Ensure <strong>StudyStation</strong> or <strong>Microsoft Edge</strong> has &ldquo;Show notification banners&rdquo; and &ldquo;Play a sound when a notification arrives&rdquo; turned on.
               </p>
             </div>
           </div>

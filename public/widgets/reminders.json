@@ -31,7 +31,7 @@
             },
             {
               "type": "TextBlock",
-              "text": "${$root.summaryText}",
+              "text": "${if($root.summaryText, $root.summaryText, 'Your tasks')}",
               "spacing": "None",
               "isSubtle": true,
               "size": "Small"
@@ -44,6 +44,7 @@
       "type": "Container",
       "separator": true,
       "spacing": "Medium",
+      "$when": "${count($root.tasks) > 0}",
       "items": [
         {
           "$data": "${$root.tasks}",
@@ -89,6 +90,22 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Medium",
+      "$when": "${count($root.tasks) == 0}",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "${if($root.isAuthenticated, 'All caught up! No pending tasks.', 'Sign in to StudyStation to track your tasks and deadlines.')}",
+          "wrap": true,
+          "isSubtle": true,
+          "size": "Small",
+          "horizontalAlignment": "Center"
         }
       ]
     }

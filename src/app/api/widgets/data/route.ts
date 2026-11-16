@@ -23,11 +23,13 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    // Unauthenticated state - safe for public/unlocked Windows screen
+    // Unauthenticated state — return complete, valid JSON so the Adaptive Card
+    // template never binds against null/undefined and shows "error loading".
+    // The $when conditions in the templates will show sign-in prompts instead.
     return NextResponse.json({
-      siteUrl,
+      siteUrl: siteUrl || "https://studystation.vercel.app",
       isAuthenticated: false,
-      summaryText: "Sign in to view your personalized study dashboard.",
+      summaryText: "Sign in to view your personalised study dashboard.",
       events: [],
       tasks: [],
       studyHours: "0",
@@ -36,7 +38,7 @@ export async function GET(request: Request) {
       countdown: "Sign in to StudyStation",
       progressMotivator: "Sign in to StudyStation to sync your timetable, tasks, and notes.",
     }, {
-      headers: { "Cache-Control": "private, no-cache" },
+      headers: { "Cache-Control": "no-store" },
     });
   }
 

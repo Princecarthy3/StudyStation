@@ -31,7 +31,7 @@
             },
             {
               "type": "TextBlock",
-              "text": "${if($root.countdown, $root.countdown, 'No more classes today')}",
+              "text": "${if($root.countdown, $root.countdown, 'No classes today')}",
               "spacing": "None",
               "isSubtle": true,
               "size": "Small"
@@ -44,6 +44,7 @@
       "type": "Container",
       "separator": true,
       "spacing": "Medium",
+      "$when": "${count($root.events) > 0}",
       "items": [
         {
           "$data": "${$root.events}",
@@ -91,6 +92,22 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "Container",
+      "separator": true,
+      "spacing": "Medium",
+      "$when": "${count($root.events) == 0}",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "${if($root.isAuthenticated, 'No classes scheduled for today. Enjoy your free time!', 'Sign in to StudyStation to view your timetable.')}",
+          "wrap": true,
+          "isSubtle": true,
+          "size": "Small",
+          "horizontalAlignment": "Center"
         }
       ]
     }
