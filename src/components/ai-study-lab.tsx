@@ -263,7 +263,12 @@ export function AiStudyLab() {
                   <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"><option value="introductory">Introductory</option><option value="standard">Standard</option><option value="advanced">Advanced</option></select>
                 </label>
                 {(action === "quiz" || action === "flashcards") && <label className="text-[10px] font-extrabold text-[#5d5768]">{action === "quiz" ? "QUESTION COUNT" : "CARD COUNT"}
-                  <input type="number" min={3} max={action === "quiz" ? 15 : 20} value={count} onChange={(event) => setCount(Number(event.target.value))} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]" />
+                  <input type="number" min={3} max={action === "quiz" ? 30 : 20} value={count} onChange={(event) => {
+                    const next = Math.round(Number(event.target.value));
+                    const max = action === "quiz" ? 30 : 20;
+                    if (!Number.isFinite(next)) return;
+                    setCount(Math.min(max, Math.max(3, next)));
+                  }} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]" />
                 </label>}
               </div>
               <label className="mt-4 block text-[10px] font-extrabold text-[#5d5768]">OPTIONAL INSTRUCTIONS

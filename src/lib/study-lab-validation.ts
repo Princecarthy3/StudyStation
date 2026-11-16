@@ -74,18 +74,80 @@ export function validateStudyOutput(action: StudyLabAction, value: unknown): val
         && text((card as Record<string, unknown>).back, 1200));
   }
 
-  return text(output.title, 160)
+  return text(output.title, 200)
     && Array.isArray(output.questions)
-    && output.questions.length >= 3
-    && output.questions.length <= 15
+    && output.questions.length >= 1
+    && output.questions.length <= 30
     && output.questions.every((question) => {
       if (!question || typeof question !== "object") return false;
       const item = question as Record<string, unknown>;
-      return text(item.question, 600)
-        && textList(item.choices, 4, 4, 300)
-        && Number.isInteger(item.correctIndex)
-        && (item.correctIndex as number) >= 0
-        && (item.correctIndex as number) < 4
-        && text(item.explanation, 1000);
+      const choices = item.choices;
+      const correctIndex = Number(item.correctIndex);
+      return text(item.question, 800)
+        && Array.isArray(choices)
+        && choices.length >= 2
+        && choices.length <= 6
+        && choices.every((c) => text(c, 400))
+        && Number.isFinite(correctIndex)
+        && Number.isInteger(correctIndex)
+        && correctIndex >= 0
+        && correctIndex < (choices as unknown[]).length
+        && text(item.explanation, 1500);
     });
 }
+
+/** Normalize model quiz JSON into a stable shape the UI expects. */
+export function normalizeQuizOutput(value: unknown, requestedCount: number): QuizOutput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const title = typeof raw.title === "string" && raw.title.trim()
+    ? raw.title.trim().slice(0, 200)
+    : "Practice quiz";
+  const list = Array.isArray(raw.questions) ? raw.questions
+    : Array.isArray(raw.quiz) ? raw.quiz
+      : Array.isArray(raw.items) ? raw.items
+        : [];
+  const questions: QuizOutput["questions"] = [];
+  for (const entry of list) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = entry as Record<string, unknown>;
+    const questionText = typeof item.question === "string" ? item.question.trim()
+      : typeof item.prompt === "string" ? item.prompt.trim()
+        : typeof item.text === "string" ? item.text.trim()
+          : "";
+    if (!questionText) continue;
+    let choices: string[] = [];
+    if (Array.isArray(item.choices)) {
+      choices = item.choices.map((c) => String(c ?? "").trim()).filter(Boolean);
+    } else if (Array.isArray(item.options)) {
+      choices = item.options.map((c) => String(c ?? "").trim()).filter(Boolean);
+    }
+    while (choices.length < 4) choices.push(`Option ${choices.length + 1}`);
+    choices = choices.slice(0, 4);
+    let correctIndex = Number(item.correctIndex);
+    if (!Number.isInteger(correctIndex)) {
+      if (typeof item.answer === "string") {
+        const idx = choices.findIndex((c) => c.toLowerCase() === String(item.answer).toLowerCase());
+        correctIndex = idx >= 0 ? idx : 0;
+      } else if (typeof item.correct === "number") {
+        correctIndex = Number(item.correct);
+      } else {
+        correctIndex = 0;
+      }
+    }
+    correctIndex = Math.max(0, Math.min(3, Math.trunc(correctIndex)));
+    const explanation = typeof item.explanation === "string" && item.explanation.trim()
+      ? item.explanation.trim().slice(0, 1500)
+      : "Review the lecture notes for this concept.";
+    questions.push({
+      question: questionText.slice(0, 800),
+      choices: choices.map((c) => c.slice(0, 400)),
+      correctIndex,
+      explanation,
+    });
+    if (questions.length >= Math.min(30, Math.max(1, requestedCount || 30))) break;
+  }
+  if (!questions.length) return null;
+  return { title, questions };
+}
+

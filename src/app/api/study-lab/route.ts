@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGeminiStudyModel, geminiGenerateJson, hasGeminiKey } from "@/lib/gemini";
 import { parseJsonObject } from "@/lib/openrouter";
-import { validateStudyOutput, type StudyLabAction, type StudyLabOutput } from "@/lib/study-lab-validation";
+import { normalizeQuizOutput, validateStudyOutput, type StudyLabAction, type StudyLabOutput } from "@/lib/study-lab-validation";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -45,7 +45,13 @@ function createPrompt(action: StudyLabAction, sourceTitle: string, sourceText: s
     explain: "Explain the requested concept clearly at the requested difficulty. Ground course-specific facts in the source, and use your subject knowledge to clarify them without contradicting the source.",
     ask: "Answer the student's question directly using your subject knowledge even when the source omits the answer. Do not refuse just because the source is incomplete. Then connect the answer to source facts and label any extra material as additional explanation. State uncertainty only when you genuinely do not know.",
     flashcards: `Create exactly ${request.count} useful active-recall flashcards grounded in the source.`,
-    quiz: `Create exactly ${request.count} practice multiple-choice questions grounded in the source. Each must have four choices and one correct answer.`,
+    quiz: `Create exactly ${request.count} practice multiple-choice questions grounded in the source material.
+Difficulty level "${request.difficulty}":
+- introductory: foundational recall, definitions, basic facts; avoid multi-step reasoning.
+- standard: typical university exam style; mix recall and application.
+- advanced: deeper analysis, synthesis, edge cases, and harder distractors.
+Every question must have exactly 4 choices (plain strings) and one correct answer via correctIndex (0-3).
+Return the full set of ${request.count} questions in one JSON object. Do not stop early.`,
     simplify: "Rewrite the requested material in simpler language without changing its meaning. Use your subject knowledge to clarify terminology, but do not add unsupported course-specific claims.",
   };
 
@@ -123,13 +129,22 @@ export async function POST(request: Request) {
     return badRequest("Choose a valid lecture source.");
   }
   const instructions = typeof body.instructions === "string" ? body.instructions.trim() : "";
-  const difficulty = typeof body.difficulty === "string" ? body.difficulty : "standard";
+  const difficultyRaw = typeof body.difficulty === "string" ? body.difficulty : "standard";
   const question = typeof body.question === "string" ? body.question.trim() : "";
-  const count = body.count === undefined ? 8 : body.count;
+  const rawCount = body.count === undefined || body.count === null ? 8 : Number(body.count);
+  const count = Number.isFinite(rawCount) ? Math.min(30, Math.max(3, Math.round(rawCount))) : 8;
   if (instructions.length > 1000) return badRequest("Keep extra instructions under 1,000 characters.");
-  if (!["introductory", "standard", "advanced"].includes(difficulty)) return badRequest("Choose a valid difficulty level.");
-  if (!Number.isInteger(count) || (count as number) < 3 || (count as number) > (action === "quiz" ? 15 : 20)) {
-    if (action === "quiz" || action === "flashcards") return badRequest("Choose between 3 and 15 quiz questions or 3 and 20 flashcards.");
+  const difficulty = (() => {
+    const d = String(difficultyRaw || "standard").trim().toLowerCase();
+    if (["introductory", "intro", "beginner", "easy", "basic"].includes(d)) return "introductory";
+    if (["advanced", "hard", "expert", "challenging"].includes(d)) return "advanced";
+    return "standard";
+  })();
+  if (action === "quiz" && (count < 3 || count > 30)) {
+    return badRequest("Choose between 3 and 30 quiz questions.");
+  }
+  if (action === "flashcards" && (count < 3 || count > 20)) {
+    return badRequest("Choose between 3 and 20 flashcards.");
   }
   if ((action === "ask" || action === "explain" || action === "simplify") && (question.length < 2 || question.length > 2000)) {
     return badRequest("Enter a concept or question between 2 and 2,000 characters.");
@@ -231,13 +246,38 @@ export async function POST(request: Request) {
   } catch {
     output = null;
   }
+  if (action === "quiz") {
+    const normalized = normalizeQuizOutput(output, count);
+    if (normalized) output = normalized;
+  }
+  if (!validateStudyOutput(action, output) && action === "quiz") {
+    try {
+      const repairCount = Math.min(count, 12);
+      const repaired = await geminiGenerateJson([
+        "Return only valid JSON for a practice quiz. No markdown.",
+        `Create exactly ${repairCount} multiple-choice questions at ${difficulty} difficulty from this source.`,
+        'Schema: {"title":"...","questions":[{"question":"...","choices":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}',
+        `SOURCE TITLE: ${lecture.title}`,
+        `SOURCE MATERIAL:\n${sourceText.slice(0, 6000)}`,
+      ].join("\n\n"), {
+        model,
+        temperature: 0.3,
+        maxOutputTokens: Math.min(8192, 800 + repairCount * 220),
+      });
+      const repairedRaw = parseJsonObject<unknown>(repaired.text);
+      const normalized = normalizeQuizOutput(repairedRaw, repairCount);
+      if (normalized) output = normalized;
+    } catch (repairError) {
+      console.warn("Quiz repair pass failed", repairError instanceof Error ? repairError.message : repairError);
+    }
+  }
   if (!validateStudyOutput(action, output)) {
     const { error } = await admin.from("ai_generations")
       .update({ status: "failed", error_code: "invalid_output", updated_at: new Date().toISOString() })
       .eq("id", generationId)
       .eq("owner_id", user.id);
     if (error) console.error("Study generation failure state could not be saved", { code: error.code });
-    return badRequest("The AI returned a result in an unexpected format. Please adjust the request and try again.", 502);
+    return badRequest("The AI returned a result in an unexpected format. Try fewer questions or another difficulty, then retry.", 502);
   }
 
   const { error: updateError } = await admin.from("ai_generations")
