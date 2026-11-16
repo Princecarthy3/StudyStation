@@ -68,8 +68,10 @@ export async function sendPushNotification(userIds: string[], notification: Push
     if (!preference) return true;
     if (preference.enabled === false) return false;
     const categories = (preference.categories ?? {}) as Record<string, boolean>;
-    // Explicit false blocks; missing key stays allowed.
-    return categories[category] !== false;
+    // Explicit false/0/"false" blocks; missing key stays allowed (same as defaults).
+    const value = categories[category];
+    if (value === false || value === 0 || value === "false") return false;
+    return true;
   });
   if (!eligibleUserIds.length) return;
 

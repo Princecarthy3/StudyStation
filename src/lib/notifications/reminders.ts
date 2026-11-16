@@ -1,6 +1,7 @@
 import "server-only";
 
-import { dispatchNotification } from "@/lib/notifications/service";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPushNotification } from "@/lib/notifications/push";
 
 function minutesUntil(target: Date, now: Date) {
   return Math.round((target.getTime() - now.getTime()) / (60 * 1000));
@@ -21,9 +22,76 @@ function isAssignmentLike(title: string, type?: string | null) {
 }
 
 /**
+ * Deliver one reminder the same way group calls do:
+ * insert in-app row, then Web Push via sendPushNotification.
+ */
+async function deliverReminder(input: {
+  userId: string;
+  type:
+    | "timetable_reminder"
+    | "assignment_due"
+    | "exam_reminder"
+    | "study_reminder";
+  title: string;
+  body: string;
+  actionUrl: string;
+  dedupeKey: string;
+  tag: string;
+  requireInteraction?: boolean;
+  actionTitle?: string;
+}) {
+  const admin = createAdminClient();
+
+  // Skip if this exact window was already stored (avoids push spam).
+  const { data: existing } = await admin
+    .from("notifications")
+    .select("id")
+    .eq("user_id", input.userId)
+    .eq("dedupe_key", input.dedupeKey)
+    .maybeSingle();
+  if (existing?.id) return false;
+
+  const { error: insertError } = await admin.from("notifications").insert({
+    user_id: input.userId,
+    type: input.type,
+    title: input.title,
+    body: input.body,
+    action_url: input.actionUrl,
+    dedupe_key: input.dedupeKey,
+  });
+
+  // Unique race: another worker inserted first — do not push again.
+  if (insertError) {
+    const code = String((insertError as { code?: string }).code || "");
+    const msg = String(insertError.message || "").toLowerCase();
+    if (code === "23505" || msg.includes("duplicate") || msg.includes("unique")) {
+      return false;
+    }
+    // Still attempt push if the in-app write failed for a non-dedupe reason
+    // (matches resilience of call notifications).
+    console.warn("[Reminders] in-app insert warning:", insertError.message);
+  }
+
+  // Same Web Push entry point used by group calls / announcements.
+  await sendPushNotification([input.userId], {
+    type: input.type,
+    title: input.title,
+    body: input.body,
+    url: input.actionUrl,
+    actions: [
+      { action: "open", title: input.actionTitle || "Open" },
+      { action: "dismiss", title: "Dismiss" },
+    ],
+    tag: input.tag,
+    requireInteraction: Boolean(input.requireInteraction),
+  });
+  return true;
+}
+
+/**
  * Process class, study-block, and task-due reminders for one user.
- * Uses the same dispatchNotification → Web Push path as group calls / announcements,
- * so alerts still reach the device when the app and screen are off (service worker + push subscription).
+ * Uses the same Web Push pipeline as group calls so alerts can show
+ * when the app is closed and the screen is off.
  */
 export async function processUserReminders(
   userId: string,
@@ -33,7 +101,6 @@ export async function processUserReminders(
   let remindersSent = 0;
   const checked = { events: 0, tasks: 0, studyBlocks: 0 };
 
-  // Classes / lessons / study blocks in the next 2 hours
   const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   const { data: upcomingEvents } = await admin
     .from("timetable_events")
@@ -47,8 +114,6 @@ export async function processUserReminders(
     for (const event of upcomingEvents) {
       const startTime = new Date(event.starts_at);
       const mins = Math.max(0, minutesUntil(startTime, now));
-      // Continuous coverage for a ~5 minute scheduler:
-      // 0–10m, 10–25m, 25–50m, 50–120m buckets (one push per bucket via dedupe).
       let windowTag: string | null = null;
       if (mins <= 10) windowTag = "10m";
       else if (mins <= 25) windowTag = "25m";
@@ -56,7 +121,10 @@ export async function processUserReminders(
       else if (mins <= 120) windowTag = "2h";
       if (!windowTag) continue;
 
-      const timeLabel = startTime.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      const timeLabel = startTime.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
       const locationText = event.location ? ` in ${event.location}` : "";
       const type = (event.type || "").toLowerCase();
       const isStudy = type === "study" || type === "review" || type === "personal";
@@ -79,22 +147,21 @@ export async function processUserReminders(
           : mins < 60 ? `in ${mins} min`
             : `in about ${Math.max(1, Math.round(mins / 60))} h`;
 
-      await dispatchNotification({
-        userIds: [userId],
+      const sent = await deliverReminder({
+        userId,
         type: notifType,
         title: `${eventTypeLabel} ${when}: ${event.title}`,
         body: `Starts at ${timeLabel}${locationText}.`,
         actionUrl: "/app?view=planner",
-        actions: [
-          { action: "open", title: "Open planner" },
-          { action: "dismiss", title: "Dismiss" },
-        ],
-        dedupeKeyPrefix: `timetable:${event.id}:${windowTag}`,
+        dedupeKey: `timetable:${event.id}:${windowTag}:${userId}`,
         tag: `timetable-${event.id}-${windowTag}`,
         requireInteraction: mins <= 15,
+        actionTitle: "Open planner",
       });
-      remindersSent += 1;
-      if (isStudy) checked.studyBlocks += 1;
+      if (sent) {
+        remindersSent += 1;
+        if (isStudy) checked.studyBlocks += 1;
+      }
     }
   }
 
@@ -168,22 +235,18 @@ export async function processUserReminders(
       if (exam) titlePrefix = titlePrefix.replace("Task", "Exam");
       else if (assignment) titlePrefix = titlePrefix.replace("Task", "Assignment");
 
-      await dispatchNotification({
-        userIds: [userId],
+      const sent = await deliverReminder({
+        userId,
         type: notifType,
         title: `${titlePrefix}: ${task.title}`,
         body,
         actionUrl: "/app?view=planner",
-        actions: [
-          { action: "open", title: "View tasks" },
-          { action: "dismiss", title: "Dismiss" },
-        ],
-        dedupeKeyPrefix: `task:${task.id}:${windowTag}`,
+        dedupeKey: `task:${task.id}:${windowTag}:${userId}`,
         tag: `task-${task.id}-${windowTag}`,
-        // Same urgency style as group calls so OS shows the banner when screen is off.
         requireInteraction: overdue || mins <= 60 || high,
+        actionTitle: "View tasks",
       });
-      remindersSent += 1;
+      if (sent) remindersSent += 1;
     }
   }
 

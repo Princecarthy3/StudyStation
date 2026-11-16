@@ -6,18 +6,31 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization") || "";
+function isAuthorized(request: Request) {
   const cronSecret = process.env.CRON_SECRET?.trim();
   const vercelCron = request.headers.get("x-vercel-cron");
+  if (vercelCron) return true;
 
-  const authorized =
-    Boolean(vercelCron) ||
-    (Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`);
+  if (!cronSecret) return false;
 
-  // On Vercel Hobby, cron requests include x-vercel-cron. Also allow when CRON_SECRET is unset
-  // only if the Vercel cron header is present.
-  if (!authorized) {
+  const authHeader = request.headers.get("authorization") || "";
+  if (authHeader === `Bearer ${cronSecret}`) return true;
+
+  const headerSecret = request.headers.get("x-cron-secret") || "";
+  if (headerSecret === cronSecret) return true;
+
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get("secret") === cronSecret) return true;
+  } catch {
+    /* ignore */
+  }
+
+  return false;
+}
+
+export async function GET(request: Request) {
+  if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -50,7 +63,6 @@ export async function GET(request: Request) {
     if (row.user_id) userIds.add(row.user_id);
   }
 
-  // Include anyone with a task due in the next day so in-app + push still run.
   const horizonStart = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
   const horizonEnd = new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString();
   const { data: dueOwners } = await admin
@@ -65,8 +77,7 @@ export async function GET(request: Request) {
     if (row.owner_id) userIds.add(row.owner_id);
   }
 
-  // Anyone with a class/study block starting soon.
-  const soonEnd = new Date(Date.now() + 90 * 60 * 1000).toISOString();
+  const soonEnd = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   const { data: eventOwners } = await admin
     .from("timetable_events")
     .select("user_id")
@@ -78,7 +89,6 @@ export async function GET(request: Request) {
   }
 
   const userIdList = [...userIds];
-
   const now = new Date();
   let usersProcessed = 0;
   let remindersSent = 0;

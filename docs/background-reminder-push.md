@@ -1,30 +1,32 @@
 # Background task & class push notifications
 
-Group calls already push while the app is closed because the server
-sends a Web Push at the moment the call starts.
+Group calls push while the app is closed because the server sends Web Push
+at the moment the call starts.
 
-Tasks and timetable lessons need a **scheduled** job that checks due
-times every few minutes and uses the same Web Push path.
+Tasks and timetable lessons need a timer that checks due times every few
+minutes and uses the **same** Web Push path.
 
-## Option A — Free external cron (recommended on Vercel Hobby)
+## Required: external cron (Vercel Hobby only runs once per day)
 
-1. In Vercel → Project → Settings → Environment Variables, set:
-   - `CRON_SECRET` = a long random string
-2. Create a job at https://cron-job.org (or similar) every **5 minutes**:
-   - URL: `https://studystation.vercel.app/api/notifications/reminders/cron`
-   - Method: GET
-   - Header: `Authorization: Bearer <your CRON_SECRET>`
-3. Keep notification permission enabled on the phone and "Study reminders" / "Classes" toggled on in Settings.
+1. Vercel → Project → Environment Variables  
+   - `CRON_SECRET` = your secret (redeploy after saving)
 
-## Option B — GitHub Actions
+2. cron-job.org (or similar) every **5 minutes**:
 
-Add a workflow that GETs the same URL with the Bearer secret every 5 minutes.
-The token used to push the workflow file needs the `workflow` scope.
+### Easiest URL form (secret in query)
 
-## Verify
+```
+https://studystation.vercel.app/api/notifications/reminders/cron?secret=YOUR_CRON_SECRET
+```
 
-1. Enable notifications on the device and allow the browser permission.
-2. Create a task due in ~15 minutes.
-3. Force-close StudyStation / turn the screen off.
-4. Within a few minutes of the due window, you should get a system push
-   (same style as "Group call started").
+Method: **GET**  
+No custom headers required if you use `?secret=`.
+
+### Or header form
+
+- URL: `https://studystation.vercel.app/api/notifications/reminders/cron`
+- Header: `Authorization: Bearer YOUR_CRON_SECRET`
+
+3. On the phone: allow notifications; enable **Study reminders** and **Classes and timetable**.
+
+4. Test: create a task due in ~12 minutes, close the app, wait for the push.
