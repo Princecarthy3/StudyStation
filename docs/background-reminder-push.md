@@ -30,3 +30,7 @@ No custom headers required if you use `?secret=`.
 3. On the phone: allow notifications; enable **Study reminders** and **Classes and timetable**.
 
 4. Test: create a task due in ~12 minutes, close the app, wait for the push.
+
+
+## Redeploy note
+After setting `CRON_SECRET` in Vercel, a new production deploy is required so the secret is available to the cron route.
