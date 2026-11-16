@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Download, Menu, X } from "lucide-react";
 import { AndroidIcon } from "@/components/android-icon";
+import { WindowsIcon } from "@/components/windows-icon";
 import { Brand } from "@/components/brand";
 import { useInstallApp } from "@/components/install-app";
+import { MICROSOFT_STORE_URL } from "@/lib/windows-download";
 
 export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -43,6 +45,14 @@ export function SiteHeader() {
             <button onClick={openInstallInstructions} className="inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-[13px] font-bold text-[#514a66] transition hover:bg-white/70" type="button">
               <Download className="size-4" /> Install
             </button>
+            <a
+              href={MICROSOFT_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#d4e5f7] bg-[#f4f9fd]/80 px-3.5 text-[13px] font-bold text-[#0078d4] transition hover:bg-[#e6f2fb]"
+            >
+              <WindowsIcon className="size-3.5" /> Windows
+            </a>
             <Link href="/download" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#ded9ee]/80 bg-white/50 px-3.5 text-[13px] font-bold text-[#514a66] transition hover:border-[#7259e8] hover:text-[#7259e8]">
               <AndroidIcon className="size-3.5" /> Android
             </Link>
@@ -65,7 +75,8 @@ export function SiteHeader() {
               {[["How it works", "#how-it-works"], ["Features", "#features"], ["For students", "#students"], ["FAQ", "#faq"]].map(([label, href]) => (
                 <a key={href} href={href} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 hover:bg-[#f7f5ff]">{label}</a>
               ))}
-              <button onClick={openInstallInstructions} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl border border-[#ded9ee] px-4 py-3 font-bold" type="button"><Download className="size-4" /> Install app</button>
+              <button onClick={openInstallInstructions} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl border border-[#ded9ee] px-4 py-3 font-bold" type="button"><Download className="size-4" /> Install Web App</button>
+              <a href={MICROSOFT_STORE_URL} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0078d4] px-4 py-3 font-bold text-white"><WindowsIcon className="size-4" /> Get on Windows</a>
               <a href="/download" className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-4 py-3 font-bold text-white"><AndroidIcon className="size-4" /> Download Android</a>
               <Link href="/auth/login" className="mt-1 rounded-xl bg-[#17132d] px-4 py-3 text-center font-bold text-white">Sign in</Link>
             </nav>

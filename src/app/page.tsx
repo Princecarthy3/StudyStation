@@ -52,6 +52,8 @@ import { ReviewSection } from "@/components/review-section";
 import { ForceLightTheme } from "@/components/force-light-theme";
 import { ANDROID_APK_URL } from "@/lib/android-download";
 import { AndroidIcon } from "@/components/android-icon";
+import { WindowsIcon } from "@/components/windows-icon";
+import { MICROSOFT_STORE_URL } from "@/lib/windows-download";
 
 const waveform = [18, 30, 46, 22, 58, 36, 68, 42, 24, 52, 76, 44, 62, 26, 54, 70, 40, 22, 48, 32, 64, 42, 26, 38];
 
@@ -137,11 +139,20 @@ export default function LandingPage() {
               <ArrowRight className="size-4.5 transition-transform duration-200 group-hover:translate-x-1" />
             </Link>
             <a
+              href={MICROSOFT_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glass-pill inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl px-6 text-[15px] font-extrabold text-[#28213f] shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#c7bdf3] hover:bg-white/90 sm:w-auto"
+            >
+              <WindowsIcon className="size-4 text-[#0078d4]" />
+              Get on Windows
+            </a>
+            <a
               href="#interactive-demo"
-              className="glass-pill inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl px-7 text-[15px] font-extrabold text-[#28213f] shadow-sm transition duration-200 hover:-translate-y-1 hover:border-[#c7bdf3] hover:bg-white/90 sm:w-auto"
+              className="inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl px-6 text-[15px] font-extrabold text-[#605a72] transition duration-200 hover:text-[#7259e8] sm:w-auto"
             >
               <CirclePlay className="size-4.5 text-[#7259e8]" />
-              Explore all features
+              Explore features
             </a>
           </div>
 
@@ -961,33 +972,71 @@ export default function LandingPage() {
         </div>
       </section>
 
-            {/* Android download */}
-      <section className="px-5 py-16 sm:py-20">
-        <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 rounded-[28px] border border-[#e8e4f1] bg-white p-8 text-center shadow-sm sm:flex-row sm:p-10 sm:text-left">
-          <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#7259e8] to-[#5b47bd] text-white shadow-lg shadow-[#7259e8]/25">
-            <AndroidIcon className="size-8" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-black uppercase tracking-[.14em] text-[#7259e8]">Android</p>
-            <h2 className="mt-1 text-[22px] font-black tracking-tight text-[#17132d] sm:text-[26px]">
-              Download for Android
-            </h2>
-            <p className="mt-2 text-[14px] leading-relaxed text-[#605a72] sm:text-[15px]">
-              Get StudyStation on your Android device and take your learning experience wherever you go.
-            </p>
+            {/* App Downloads Section: Android & Windows */}
+      <section className="px-5 py-14 sm:py-16">
+        <div className="mx-auto max-w-4xl space-y-5">
+          {/* Windows Download Card */}
+          <div className="flex flex-col items-center gap-6 rounded-[28px] border border-[#d9e5f7] bg-gradient-to-br from-white to-[#f4f8fe] p-8 text-center shadow-sm sm:flex-row sm:p-9 sm:text-left">
+            <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#0078d4] to-[#005a9e] text-white shadow-lg shadow-[#0078d4]/25">
+              <WindowsIcon className="size-7" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e6f2fb] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#0078d4]">
+                Microsoft Store
+              </span>
+              <h2 className="mt-1 text-[20px] font-black tracking-tight text-[#17132d] sm:text-[24px]">
+                Download for Windows
+              </h2>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-[#605a72]">
+                Get the certified Windows app with Windows 11 Desktop Widgets, background lecture capture, Action Center alerts, and startup integration.
+              </p>
+            </div>
+            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+              <a
+                href={MICROSOFT_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-12 items-center justify-center gap-2.5 rounded-2xl bg-[#0078d4] px-6 text-[14px] font-extrabold text-white shadow-md shadow-[#0078d4]/25 transition hover:bg-[#006bbd] active:scale-95"
+                aria-label="Download StudyStation from the Microsoft Store"
+              >
+                <WindowsIcon className="size-4" />
+                Get on Microsoft Store
+              </a>
+              <span className="text-center text-[11px] font-semibold text-[#8a8494]">
+                Windows 10 & 11 · Official Store App
+              </span>
+            </div>
           </div>
-          <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
-            <a
-              href={ANDROID_APK_URL}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7259e8] px-5 text-[14px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 transition hover:bg-[#6048d5]"
-              aria-label="Download StudyStation for Android"
-            >
-              <AndroidIcon className="size-4" />
-              Download for Android
-            </a>
-            <Link href="/download" className="text-center text-[12px] font-bold text-[#7259e8]">
-              Installation guide
-            </Link>
+
+          {/* Android download */}
+          <div className="flex flex-col items-center gap-6 rounded-[28px] border border-[#e8e4f1] bg-white p-8 text-center shadow-sm sm:flex-row sm:p-9 sm:text-left">
+            <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#7259e8] to-[#5b47bd] text-white shadow-lg shadow-[#7259e8]/25">
+              <AndroidIcon className="size-8" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3efff] px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#7259e8]">
+                Android
+              </span>
+              <h2 className="mt-1 text-[20px] font-black tracking-tight text-[#17132d] sm:text-[24px]">
+                Download for Android
+              </h2>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-[#605a72]">
+                Get StudyStation on your Android device and take your learning experience wherever you go.
+              </p>
+            </div>
+            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+              <a
+                href={ANDROID_APK_URL}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7259e8] px-5 text-[14px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 transition hover:bg-[#6048d5]"
+                aria-label="Download StudyStation for Android"
+              >
+                <AndroidIcon className="size-4" />
+                Download for Android
+              </a>
+              <Link href="/download" className="text-center text-[12px] font-bold text-[#7259e8]">
+                Installation guide
+              </Link>
+            </div>
           </div>
         </div>
       </section>

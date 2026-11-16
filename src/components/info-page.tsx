@@ -32,6 +32,7 @@ export const footerLinkGroups: { title: string; links: { href: string; label: st
       { href: "/about", label: "About StudyStation" },
       { href: "/features", label: "Features" },
       { href: "/download", label: "Download Android" },
+      { href: "https://apps.microsoft.com/detail/9PP0J63X4F1S", label: "Download for Windows" },
       { href: "/faq", label: "FAQs" },
     ],
   },

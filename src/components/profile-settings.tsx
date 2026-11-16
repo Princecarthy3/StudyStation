@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { ThemePreference } from "@/components/theme-provider";
 import { NotificationPreferences } from "@/components/notification-preferences";
 import { WindowsIntegrationSettings } from "@/components/windows-integration-settings";
+import { WhatsAppFeedbackSection } from "@/components/whatsapp-feedback-section";
 
 type ProfileSettingsData = {
   fullName: string;
@@ -187,6 +188,11 @@ export function ProfileSettings({
     <NotificationPreferences />
 
     <WindowsIntegrationSettings />
+
+    <WhatsAppFeedbackSection
+      studentName={profile.fullName}
+      university={profile.university}
+    />
 
     {profile.email?.toLowerCase() === "studystation.support@gmail.com" && (
       <section className="profile-panel rounded-[24px] border border-indigo-200 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 p-5 sm:p-7">
