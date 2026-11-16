@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Check, LoaderCircle } from "lucide-react";
+import { Bell, Check, LoaderCircle, Volume2 } from "lucide-react";
+import { playNotificationChime } from "@/lib/notifications/sound";
+import { ensurePushSubscription } from "@/lib/notifications/subscribe-client";
 
 const categoryLabels = [
   ["classes", "Classes and timetable"],
@@ -34,6 +36,9 @@ export function NotificationPreferences() {
 
   useEffect(() => {
     let active = true;
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      void ensurePushSubscription(false);
+    }
     void fetch("/api/notifications/preferences", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Notification preferences could not be loaded.");
@@ -144,21 +149,45 @@ export function NotificationPreferences() {
               setMessage("");
               setError("");
               try {
-                const res = await fetch("/api/notifications/reminders", {
+                // 1. Play audible notification sound chime immediately
+                playNotificationChime();
+
+                // 2. Ensure device is registered in push_subscriptions
+                await ensurePushSubscription(true);
+
+                // 3. Trigger immediate native toast banner via Service Worker
+                if ("serviceWorker" in navigator) {
+                  const reg = await navigator.serviceWorker.ready;
+                  if (reg && reg.active) {
+                    reg.active.postMessage({
+                      type: "SHOW_NOTIFICATION",
+                      payload: {
+                        title: "StudyStation Study Reminder",
+                        body: "Notification banners & sounds are active on this device! Your upcoming classes and tasks will appear here.",
+                        tag: `test-${Date.now()}`,
+                        actions: [{ action: "open", title: "Open StudyStation" }],
+                      },
+                    });
+                  }
+                }
+
+                // 4. Send backend push test to exercise server pipeline
+                await fetch("/api/notifications/reminders", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ test: true }),
                 });
-                if (!res.ok) throw new Error("Could not send test notification");
-                setMessage("Test notification sent! Check your notification center.");
+
+                setMessage("Notification banner & chime sent! Check your screen.");
               } catch (e) {
                 setError(e instanceof Error ? e.message : "Failed to trigger notification");
               } finally {
                 setBusy(false);
               }
             }}
-            className="shrink-0 rounded-lg bg-white border border-[#7259e8]/30 px-3 py-1.5 text-xs font-bold text-[#7259e8] hover:bg-purple-50 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-white border border-[#7259e8]/30 px-3 py-1.5 text-xs font-bold text-[#7259e8] hover:bg-purple-50 active:scale-95 transition-all shadow-sm disabled:opacity-50"
           >
+            <Volume2 className="size-3.5" />
             Send Test Notification
           </button>
         </div>

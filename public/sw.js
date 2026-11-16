@@ -1,4 +1,4 @@
-const CACHE_NAME = "studystation-public-v4";
+const CACHE_NAME = "studystation-public-v5";
 const STATIC_ASSETS = [
   "/offline.html",
   "/logo.png",
@@ -55,19 +55,61 @@ self.addEventListener("push", (event) => {
     ? payload.actions.filter((action) => action && typeof action.action === "string" && typeof action.title === "string").slice(0, 3)
     : [];
 
-  event.waitUntil(self.registration.showNotification(title, {
+  const icon = new URL("/icons/icon-192.png", self.location.origin).href;
+  const badge = new URL("/icons/icon-192.png", self.location.origin).href;
+
+  const options = {
     body,
-    tag: typeof payload.tag === "string" ? payload.tag : undefined,
+    tag: typeof payload.tag === "string" ? payload.tag : `studystation-${Date.now()}`,
     renotify: true,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
+    icon,
+    badge,
     requireInteraction: payload.requireInteraction !== undefined ? Boolean(payload.requireInteraction) : true,
     silent: false,
     vibrate: [200, 100, 200],
     timestamp: Date.now(),
     actions,
     data,
-  }));
+  };
+
+  if (typeof payload.image === "string" && payload.image.trim()) {
+    options.image = new URL(payload.image, self.location.origin).href;
+  }
+
+  // Broadcast chime to any open StudyStation windows
+  self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    clients.forEach((client) => {
+      client.postMessage({ type: "STUDYSTATION_NOTIFICATION_CHIME", payload });
+    });
+  }).catch(() => {});
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Allow foreground tabs to display native toast banners via service worker
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SHOW_NOTIFICATION") {
+    const payload = event.data.payload || {};
+    const title = payload.title || "StudyStation";
+    const icon = new URL("/icons/icon-192.png", self.location.origin).href;
+    const badge = new URL("/icons/icon-192.png", self.location.origin).href;
+
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body: payload.body || "",
+        icon,
+        badge,
+        tag: payload.tag || `local-${Date.now()}`,
+        renotify: true,
+        requireInteraction: true,
+        silent: false,
+        vibrate: [200, 100, 200],
+        timestamp: Date.now(),
+        actions: payload.actions || [],
+        data: payload.data || { url: "/app" },
+      })
+    );
+  }
 });
 
 self.addEventListener("notificationclick", (event) => {
