@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquarePlus, ExternalLink, Copy, Check, Sparkles } from "lucide-react";
+import { MessageSquarePlus, ExternalLink, Copy, Check, Users, Sparkles } from "lucide-react";
 import { WhatsAppIcon } from "@/components/whatsapp-icon";
-import { SUPPORT_WHATSAPP_NUMBER, SUPPORT_WHATSAPP_DISPLAY } from "@/lib/windows-download";
+import {
+  SUPPORT_WHATSAPP_NUMBER,
+  SUPPORT_WHATSAPP_DISPLAY,
+  STUDYSTATION_WHATSAPP_COMMUNITY_URL,
+} from "@/lib/windows-download";
 
 type FeedbackType = "review" | "bug" | "feature" | "general";
 
@@ -77,6 +81,36 @@ export function WhatsAppFeedbackSection({
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Official WhatsApp Student Community Banner */}
+      <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50/70 to-teal-50/50 p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/20">
+            <Users className="size-4.5" />
+          </span>
+          <div>
+            <h3 className="text-xs font-black text-[#1e2a22] flex items-center gap-2">
+              StudyStation Student WhatsApp Group
+              <span className="rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5">
+                Official Community
+              </span>
+            </h3>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-[#526356]">
+              Connect with fellow students, get study updates, share lecture tips, and request features directly with the community.
+            </p>
+          </div>
+        </div>
+        <a
+          href={STUDYSTATION_WHATSAPP_COMMUNITY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-800 active:scale-95"
+        >
+          <WhatsAppIcon className="size-3.5" />
+          Join Group
+          <ExternalLink className="size-3 opacity-80" />
+        </a>
       </div>
 
       <div className="pt-5 space-y-4">
