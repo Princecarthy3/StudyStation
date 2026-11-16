@@ -264,6 +264,18 @@ export async function updateStudyTask(formData: FormData): Promise<Stage6ActionR
     .maybeSingle();
   if (error) return { error: "We couldn’t update that task. Check the deadline and try again." };
   if (!data) return { error: "That task is no longer available in your account." };
+
+  if (dueAt) {
+    void (async () => {
+      try {
+        const admin = createAdminClient();
+        await processUserReminders(auth.user.id, admin);
+      } catch (err) {
+        console.warn("[updateStudyTask] reminder pass failed", err);
+      }
+    })();
+  }
+
   revalidatePath("/app");
   return { success: "Task updated." };
 }
@@ -365,6 +377,15 @@ export async function savePlannerEvent(formData: FormData): Promise<Stage6Action
     const { error } = await auth.supabase.from("timetable_events").insert(event);
     if (error) return { error: "The calendar item could not be saved. Check that the Stage 4 migration is applied." };
   }
+  void (async () => {
+    try {
+      const admin = createAdminClient();
+      await processUserReminders(auth.user.id, admin);
+    } catch (err) {
+      console.warn("[savePlannerEvent] reminder pass failed", err);
+    }
+  })();
+
   revalidatePath("/app");
   return { success: id ? "Calendar item updated." : "Calendar item added." };
 }

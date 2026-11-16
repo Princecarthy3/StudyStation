@@ -2,13 +2,6 @@ import "server-only";
 
 import { dispatchNotification } from "@/lib/notifications/service";
 
-// Admin client shape (avoid tight coupling to generated Supabase types)
-type AdminClient = {
-  from: (table: string) => {
-    select: (columns: string) => any;
-  };
-};
-
 function minutesUntil(target: Date, now: Date) {
   return Math.round((target.getTime() - now.getTime()) / (60 * 1000));
 }
@@ -29,6 +22,8 @@ function isAssignmentLike(title: string, type?: string | null) {
 
 /**
  * Process class, study-block, and task-due reminders for one user.
+ * Uses the same dispatchNotification → Web Push path as group calls / announcements,
+ * so alerts still reach the device when the app and screen are off (service worker + push subscription).
  */
 export async function processUserReminders(
   userId: string,
@@ -38,23 +33,29 @@ export async function processUserReminders(
   let remindersSent = 0;
   const checked = { events: 0, tasks: 0, studyBlocks: 0 };
 
-  const in60Minutes = new Date(now.getTime() + 60 * 60 * 1000);
+  // Classes / lessons / study blocks in the next 2 hours
+  const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   const { data: upcomingEvents } = await admin
     .from("timetable_events")
     .select("id, title, location, type, starts_at, ends_at")
     .eq("user_id", userId)
     .gte("starts_at", now.toISOString())
-    .lte("starts_at", in60Minutes.toISOString());
+    .lte("starts_at", in2Hours.toISOString());
 
   if (upcomingEvents?.length) {
     checked.events = upcomingEvents.length;
     for (const event of upcomingEvents) {
       const startTime = new Date(event.starts_at);
-      const mins = Math.max(1, minutesUntil(startTime, now));
-      // ~45m, ~15m, and ~5m windows (tolerant of a 5-minute cron).
-      if (!(mins <= 55 && (mins >= 35 || (mins >= 10 && mins <= 22) || mins <= 8))) {
-        continue;
-      }
+      const mins = Math.max(0, minutesUntil(startTime, now));
+      // Continuous coverage for a ~5 minute scheduler:
+      // 0–10m, 10–25m, 25–50m, 50–120m buckets (one push per bucket via dedupe).
+      let windowTag: string | null = null;
+      if (mins <= 10) windowTag = "10m";
+      else if (mins <= 25) windowTag = "25m";
+      else if (mins <= 50) windowTag = "50m";
+      else if (mins <= 120) windowTag = "2h";
+      if (!windowTag) continue;
+
       const timeLabel = startTime.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
       const locationText = event.location ? ` in ${event.location}` : "";
       const type = (event.type || "").toLowerCase();
@@ -66,23 +67,31 @@ export async function processUserReminders(
               : type === "exam" ? "Exam"
                 : isStudy ? "Study block"
                   : "Event";
-      const windowTag = mins <= 6 ? "5m" : mins <= 20 ? "15m" : "45m";
+
       const notifType = isExamLike(event.title, type)
         ? "exam_reminder"
         : isStudy
           ? "study_reminder"
           : "timetable_reminder";
 
+      const when =
+        mins <= 1 ? "now"
+          : mins < 60 ? `in ${mins} min`
+            : `in about ${Math.max(1, Math.round(mins / 60))} h`;
+
       await dispatchNotification({
         userIds: [userId],
         type: notifType,
-        title: `${eventTypeLabel} in ${mins}m: ${event.title}`,
+        title: `${eventTypeLabel} ${when}: ${event.title}`,
         body: `Starts at ${timeLabel}${locationText}.`,
         actionUrl: "/app?view=planner",
-        actions: [{ action: "open", title: "Open planner" }],
+        actions: [
+          { action: "open", title: "Open planner" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
         dedupeKeyPrefix: `timetable:${event.id}:${windowTag}`,
         tag: `timetable-${event.id}-${windowTag}`,
-        requireInteraction: mins <= 6,
+        requireInteraction: mins <= 15,
       });
       remindersSent += 1;
       if (isStudy) checked.studyBlocks += 1;
@@ -119,23 +128,21 @@ export async function processUserReminders(
       let titlePrefix = "Task due";
       let body = "";
 
-      // Windows are wide enough for a 5-minute cron without missing due alerts.
       if (overdue && mins >= -180) {
         windowTag = "overdue";
         titlePrefix = "Task overdue";
         body = `"${task.title}" was due ${Math.abs(mins) < 60 ? `${Math.abs(mins)}m` : `${Math.abs(hrs)}h`} ago.`;
-      } else if (mins >= -2 && mins <= 5) {
-        // Exact due window (covers clock drift and 5-min cron lag)
+      } else if (mins >= -2 && mins <= 10) {
         windowTag = "due-now";
         titlePrefix = high ? "High priority task is due" : "Task is due";
         body = mins <= 0
           ? `"${task.title}" is due now.`
           : `"${task.title}" is due in ${mins} minute${mins === 1 ? "" : "s"}.`;
-      } else if (mins > 5 && mins <= 75) {
-        windowTag = "due-soon";
+      } else if (mins > 10 && mins <= 60) {
+        windowTag = "due-1h";
         titlePrefix = high ? "High priority task due soon" : "Task due soon";
-        body = `"${task.title}" is due in ${Math.max(1, mins)} minute${mins === 1 ? "" : "s"}.`;
-      } else if (mins > 45 && mins <= 4 * 60) {
+        body = `"${task.title}" is due in ${mins} minutes.`;
+      } else if (mins > 60 && mins <= 4 * 60) {
         windowTag = "few-hours";
         titlePrefix = "Task due in a few hours";
         body = `"${task.title}" is due in about ${Math.max(1, hrs)} hour${hrs === 1 ? "" : "s"}.`;
@@ -153,8 +160,6 @@ export async function processUserReminders(
 
       const exam = isExamLike(task.title);
       const assignment = isAssignmentLike(task.title);
-      // Map to settings categories so each toggle can enable delivery.
-      // Exams → Assignments & exams; assignment-like → Assignments & exams; everything else → Study reminders.
       const notifType = exam
         ? "exam_reminder"
         : assignment
@@ -169,10 +174,14 @@ export async function processUserReminders(
         title: `${titlePrefix}: ${task.title}`,
         body,
         actionUrl: "/app?view=planner",
-        actions: [{ action: "open", title: "View tasks" }],
+        actions: [
+          { action: "open", title: "View tasks" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
         dedupeKeyPrefix: `task:${task.id}:${windowTag}`,
         tag: `task-${task.id}-${windowTag}`,
-        requireInteraction: overdue || mins <= 30 || high,
+        // Same urgency style as group calls so OS shows the banner when screen is off.
+        requireInteraction: overdue || mins <= 60 || high,
       });
       remindersSent += 1;
     }
