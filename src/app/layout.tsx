@@ -53,9 +53,6 @@ export const metadata: Metadata = {
   creator: "StudyStation",
   publisher: "StudyStation",
   category: "education",
-  alternates: {
-    canonical: "/",
-  },
   robots: {
     index: true,
     follow: true,

@@ -4,6 +4,7 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "Learn how StudyStation securely handles account information, Google OAuth user data, lecture recordings, notes, and study materials.",
+  robots: { index: true, follow: true },
   alternates: {
     canonical: "/privacy",
   },
@@ -134,6 +135,7 @@ const sections: InfoSection[] = [
 export default function PrivacyPage() {
   return (
     <InfoPage
+      pathname="/privacy"
       title="Privacy Policy"
       description="How StudyStation protects your privacy, manages your account, and handles Google OAuth user data."
       sections={sections}

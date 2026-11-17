@@ -4,6 +4,7 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 export const metadata: Metadata = {
   title: "Community Guidelines",
   description: "Guidelines for respectful, safe, and collaborative StudyStation peer study groups.",
+  robots: { index: true, follow: true },
   alternates: {
     canonical: "/community-guidelines",
   },
@@ -50,6 +51,7 @@ const sections: InfoSection[] = [
 export default function CommunityGuidelinesPage() {
   return (
     <InfoPage
+      pathname="/community-guidelines"
       title="Community Guidelines"
       description="Help make StudyStation a respectful, useful place for students to learn together."
       sections={sections}

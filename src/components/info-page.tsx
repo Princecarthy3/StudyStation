@@ -13,6 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
+import { getSiteUrl } from "@/lib/site-url";
 
 const sectionIcons = [
   BookOpenCheck,
@@ -56,13 +57,50 @@ export function InfoPage({
   title,
   description,
   sections,
+  pathname,
+  jsonLd,
 }: {
   title: string;
   description: string;
   sections: InfoSection[];
+  /** Canonical path for breadcrumbs, e.g. "/faq" */
+  pathname?: string;
+  /** Optional extra schema.org objects */
+  jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
 }) {
+  const siteUrl = getSiteUrl();
+  const pageUrl = pathname ? `${siteUrl}${pathname}` : siteUrl;
+  const webPageSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description,
+    url: pageUrl,
+    isPartOf: { "@type": "WebSite", name: "StudyStation", url: siteUrl },
+    inLanguage: "en-US",
+  };
+  const breadcrumbSchema = pathname
+    ? {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
+          { "@type": "ListItem", position: 2, name: title, item: pageUrl },
+        ],
+      }
+    : null;
+  const schemas = [
+    webPageSchema,
+    ...(breadcrumbSchema ? [breadcrumbSchema] : []),
+    ...(jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []),
+  ];
+
   return (
     <main className="info-page min-h-screen overflow-hidden bg-[#fbfaff] px-5 py-5 text-[#17132d] sm:px-8 sm:py-7">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.length === 1 ? schemas[0] : schemas) }}
+      />
       <header className="info-enter relative z-10 mx-auto flex max-w-[1180px] items-center justify-between">
         <Brand />
         <Link href="/" className="group inline-flex items-center gap-2 rounded-full border border-[#e6e1ef] bg-white/80 px-4 py-2.5 text-xs font-bold text-[#514a66] shadow-sm backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:border-[#c9bdf4] hover:text-[#7259e8]">

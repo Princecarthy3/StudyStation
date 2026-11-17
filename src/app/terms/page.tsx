@@ -4,6 +4,7 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description: "Terms and conditions for using StudyStation educational tools, authentication, and study services.",
+  robots: { index: true, follow: true },
   alternates: {
     canonical: "/terms",
   },
@@ -76,6 +77,7 @@ const sections: InfoSection[] = [
 export default function TermsPage() {
   return (
     <InfoPage
+      pathname="/terms"
       title="Terms of Service"
       description="The rules and conditions governing your use of StudyStation."
       sections={sections}

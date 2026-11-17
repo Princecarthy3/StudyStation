@@ -4,6 +4,7 @@ import { InfoPage, type InfoSection } from "@/components/info-page";
 export const metadata: Metadata = {
   title: "About",
   description: "Learn about StudyStation and how it helps students organize their learning with AI notes, flashcards, and smart study planning.",
+  robots: { index: true, follow: true },
   alternates: {
     canonical: "/about",
   },
@@ -40,6 +41,7 @@ const sections: InfoSection[] = [
 export default function AboutPage() {
   return (
     <InfoPage
+      pathname="/about"
       title="About StudyStation"
       description="A focused study workspace that helps turn lectures and coursework into a more organized learning routine."
       sections={sections}
