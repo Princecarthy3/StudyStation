@@ -710,6 +710,7 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
                                       starts_at: item.created_at,
                                       ends_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
                                       status: "scheduled",
+                                      notes: null,
                                     });
                                   } else {
                                     void startGroupCall();
