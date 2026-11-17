@@ -52,6 +52,10 @@ type ImportResponse = {
   }>;
   sourceName?: string;
   disclosure?: string;
+  semesterStart?: string;
+  semesterEnd?: string;
+  expandedCount?: number;
+  templateCount?: number;
 };
 
 const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -368,6 +372,8 @@ export function StudyCalendar({
       return;
     }
     form.set("timezone", timezone);
+    form.set("semesterStart", semesterStart);
+    form.set("semesterEnd", semesterEnd);
     setImportBusy(true);
     setImportError("");
     setImportNotice("");
@@ -378,6 +384,11 @@ export function StudyCalendar({
       if (!response.ok || !result?.events) throw new Error(result?.error ?? "The calendar file could not be read.");
       setImportSource(result.sourceName ?? file.name);
       setImportDisclosure(result.disclosure ?? "");
+      if (result.expandedCount && result.templateCount && result.expandedCount > result.templateCount) {
+        setImportNotice(
+          `Expanded ${result.templateCount} weekly classes into ${result.expandedCount} semester sessions (${result.semesterStart ?? semesterStart} → ${result.semesterEnd ?? semesterEnd}).`,
+        );
+      }
       setImportDraft(result.events.map((item) => ({
         ...item,
         courseId: eventCourse(item.course, courses),
@@ -423,7 +434,9 @@ export function StudyCalendar({
         setImportDraft([]);
         setImportOpen(false);
         setCalendarMode("week");
-        setStatusMessage(result.success ?? "Calendar imported.");
+        setPlanStart(semesterStart);
+        setPlanEnd(semesterEnd);
+        setStatusMessage(result.success ?? "Semester calendar imported. Weekly classes now span your semester range.");
         router.refresh();
       }
     });
@@ -869,6 +882,18 @@ export function StudyCalendar({
       <header className="flex items-start justify-between border-b border-[#eeeaf2] p-4 sm:p-5"><div><p className="text-[9px] font-black uppercase tracking-wide text-[#7259e8]">SCHOOL CALENDAR IMPORT</p><h2 id="calendar-import-title" className="mt-1 text-base font-extrabold">Review before adding</h2></div><button type="button" onClick={() => {setImportOpen(false); setSelectedFileName(""); setImportDraft([]); setImportError(""); setImportNotice("");}} aria-label="Close import dialog" className="grid size-8 place-items-center rounded-lg border border-[#e9e5ef]"><X className="size-4" /></button></header>
       <div className="space-y-3 overflow-y-auto p-4 sm:p-5">
         <form onSubmit={importSchoolCalendar} className="space-y-3"><label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[#d8d2e5] bg-[#fbfaff] px-3 py-4 text-center hover:bg-[#f6f3ff] transition"><Upload className="size-5 text-[#7259e8]" /><span className="mt-2 text-[10px] font-extrabold text-[#17132d]">{selectedFileName ? selectedFileName : "Choose CSV, Excel (.xlsx, .xls), PDF, or image (PNG, JPEG, WebP) · Max 15 MB"}</span><span className="mt-0.5 text-[8px] text-[#8a8494]">{selectedFileName ? "Click to pick a different file" : "Click to browse files"}</span><input required name="file" type="file" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf,image/*" onChange={(e) => { const f = e.target.files?.[0]; setSelectedFileName(f ? `${f.name} (${(f.size / 1024).toFixed(0)} KB)` : ""); }} className="sr-only" /></label>
+          <div className="grid gap-2 rounded-xl border border-[#ebe6f5] bg-[#fbfaff] p-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <p className="text-[10px] font-extrabold text-[#17132d]">Semester range</p>
+              <p className="mt-0.5 text-[9px] leading-4 text-[#8a8494]">Weekly classes from your school timetable are repeated from the start date through the end date so the whole semester appears in month and week views.</p>
+            </div>
+            <label className="block text-[9px] font-bold text-[#5d5768]">Semester starts
+              <input type="date" name="semesterStart" required value={semesterStart} onChange={(e) => setSemesterStart(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]" />
+            </label>
+            <label className="block text-[9px] font-bold text-[#5d5768]">Semester ends
+              <input type="date" name="semesterEnd" required value={semesterEnd} onChange={(e) => setSemesterEnd(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]" />
+            </label>
+          </div>
           <p className="text-[9px] leading-4 text-[#8a8494]">CSV and Excel (.xlsx, .xls) files are parsed locally using columns like <code>title,date,start_time,end_time,location,type,course</code>. Schedule screenshots (PNG, JPG, WebP) or PDFs are parsed using AI.</p>
           <label className="flex items-start gap-2 rounded-lg bg-[#fff9e9] p-3 text-[9px] leading-4 text-[#685c41]"><input type="checkbox" checked={imageConsent} onChange={(event) => setImageConsent(event.target.checked)} className="mt-0.5 accent-[#7259e8]" /><span>AI processes timetable images/PDFs. Upload only files you are comfortable sharing.</span></label>
           <button type="submit" disabled={importBusy} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-3.5 text-[9px] font-extrabold text-white disabled:opacity-60">{importBusy ? <LoaderCircle className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}{importBusy ? "Reading calendar…" : "Extract calendar entries"}</button>

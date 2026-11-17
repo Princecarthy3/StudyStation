@@ -21,6 +21,126 @@ type ImportedEvent = {
 const allowedTypes = new Set(["lecture", "lab", "seminar", "study", "review", "exam", "personal"]);
 const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
+
+/** Parse YYYY-MM-DD as a UTC noon date for stable weekday math. */
+function parseYmd(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatYmdUtc(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function weekdayUtc(date: Date): number {
+  return date.getUTCDay();
+}
+
+/**
+ * School timetables are weekly patterns for a whole semester.
+ * Expand one-week (or sparse) extractions across [semesterStart, semesterEnd].
+ */
+function expandEventsAcrossSemester(
+  events: ImportedEvent[],
+  semesterStart: string,
+  semesterEnd: string,
+  maxEvents = 500,
+): ImportedEvent[] {
+  const start = parseYmd(semesterStart);
+  const end = parseYmd(semesterEnd);
+  if (!start || !end || end < start || !events.length) return events;
+
+  const withDates = events.filter((e) => e.startsAtLocal && localDateTimePattern.test(e.startsAtLocal));
+  if (!withDates.length) return events;
+
+  const uniqueDays = new Set(withDates.map((e) => e.startsAtLocal!.slice(0, 10)));
+  // Explicit multi-week calendar already — only clip to semester bounds.
+  if (uniqueDays.size > 14) {
+    return events.filter((e) => {
+      if (!e.startsAtLocal) return true;
+      const day = e.startsAtLocal.slice(0, 10);
+      return day >= semesterStart && day <= semesterEnd;
+    }).slice(0, maxEvents);
+  }
+
+  type Slot = {
+    title: string;
+    type: string;
+    location: string | null;
+    course: string | null;
+    weekday: number;
+    startHm: string;
+    endHm: string;
+  };
+  const slots = new Map<string, Slot>();
+  for (const event of withDates) {
+    const startLocal = event.startsAtLocal!;
+    const endLocal = event.endsAtLocal && localDateTimePattern.test(event.endsAtLocal)
+      ? event.endsAtLocal
+      : null;
+    if (!endLocal) continue;
+    const day = parseYmd(startLocal.slice(0, 10));
+    if (!day) continue;
+    const weekday = weekdayUtc(day);
+    const startHm = startLocal.slice(11, 16);
+    const endHm = endLocal.slice(11, 16);
+    const key = `${weekday}|${startHm}|${endHm}|${event.title}|${event.type}|${event.location ?? ""}|${event.course ?? ""}`;
+    if (!slots.has(key)) {
+      slots.set(key, {
+        title: event.title,
+        type: event.type,
+        location: event.location,
+        course: event.course,
+        weekday,
+        startHm,
+        endHm,
+      });
+    }
+  }
+
+  if (!slots.size) return events;
+
+  const expanded: ImportedEvent[] = [];
+  for (let cursor = new Date(start.getTime()); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const ymd = formatYmdUtc(cursor);
+    const wd = weekdayUtc(cursor);
+    for (const slot of slots.values()) {
+      if (slot.weekday !== wd) continue;
+      expanded.push({
+        title: slot.title,
+        type: slot.type,
+        location: slot.location,
+        course: slot.course,
+        startsAtLocal: `${ymd}T${slot.startHm}`,
+        endsAtLocal: `${ymd}T${slot.endHm}`,
+      });
+      if (expanded.length >= maxEvents) return expanded;
+    }
+  }
+
+  return expanded.length ? expanded : events;
+}
+
+function resolveSemesterRange(form: FormData): { start: string; end: string } {
+  const today = new Date();
+  const defaultStart = formatYmdUtc(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 12)));
+  const defaultEndDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 16 * 7, 12));
+  const defaultEnd = formatYmdUtc(defaultEndDate);
+
+  const startRaw = typeof form.get("semesterStart") === "string" ? String(form.get("semesterStart")).trim() : "";
+  const endRaw = typeof form.get("semesterEnd") === "string" ? String(form.get("semesterEnd")).trim() : "";
+  const start = parseYmd(startRaw) ? startRaw : defaultStart;
+  let end = parseYmd(endRaw) ? endRaw : defaultEnd;
+  if (end < start) end = defaultEnd;
+  const startDate = parseYmd(start)!;
+  const maxEnd = new Date(startDate.getTime());
+  maxEnd.setUTCDate(maxEnd.getUTCDate() + 190);
+  if (parseYmd(end)! > maxEnd) end = formatYmdUtc(maxEnd);
+  return { start, end };
+}
+
 function fail(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -692,9 +812,19 @@ export async function POST(request: Request) {
     }
   }
 
+  const semester = resolveSemesterRange(form);
+  const expanded = expandEventsAcrossSemester(events, semester.start, semester.end, 500);
+
   return NextResponse.json({
-    events,
+    events: expanded,
     sourceName: file.name.slice(0, 200),
-    disclosure: "PDF and image contents are processed securely for calendar extraction. Review every result before importing.",
+    semesterStart: semester.start,
+    semesterEnd: semester.end,
+    expandedCount: expanded.length,
+    templateCount: events.length,
+    disclosure:
+      expanded.length > events.length
+        ? `Weekly classes were expanded across your semester (${semester.start} → ${semester.end}). Review every result before importing.`
+        : "PDF and image contents are processed securely for calendar extraction. Review every result before importing.",
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -405,8 +405,8 @@ export async function createPlannerEvents(
   items: PlannerEventInput[],
   timezone: string,
 ): Promise<Stage6ActionResult> {
-  if (!Array.isArray(items) || items.length < 1 || items.length > 200) {
-    return { error: "Choose between 1 and 200 calendar items to import." };
+  if (!Array.isArray(items) || items.length < 1 || items.length > 500) {
+    return { error: "Choose between 1 and 500 calendar items to import." };
   }
   if (typeof timezone !== "string" || timezone.length > 100) return { error: "Choose a valid calendar timezone." };
   const auth = await getUserClient();
