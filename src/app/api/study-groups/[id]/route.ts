@@ -95,22 +95,30 @@ export async function GET(request: Request, context: RouteContext) {
     .limit(51);
   if (before) messagesQuery = messagesQuery.lt("created_at", before);
 
-  // Auto-complete any stale instant call sessions older than 30 minutes
-  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  // Auto-complete instant calls only after their scheduled end (or 2h max).
+  // Do not kill live calls early based on created_at alone.
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const nowIso = new Date().toISOString();
   await admin.from("study_sessions")
     .update({ status: "completed" })
     .eq("group_id", id)
     .eq("status", "scheduled")
     .in("title", ["Instant group call", "Study Group Call"])
-    .lt("created_at", thirtyMinutesAgo);
+    .lt("ends_at", nowIso);
+  await admin.from("study_sessions")
+    .update({ status: "completed" })
+    .eq("group_id", id)
+    .eq("status", "scheduled")
+    .in("title", ["Instant group call", "Study Group Call"])
+    .lt("created_at", twoHoursAgo);
 
   const [{ data: messages, error: messagesError }, { data: sessions, error: sessionsError }, { data: resources, error: resourcesError }, { data: ownResources, error: ownResourcesError }, { data: ownNotes, error: ownNotesError }, { data: members, error: membersError }, { count, error: memberCountError }] = await Promise.all([
     messagesQuery,
     auth.supabase.from("study_sessions")
-      .select("id, title, starts_at, ends_at, status, notes")
+      .select("id, title, starts_at, ends_at, status, notes, call_room_id")
       .eq("group_id", id)
-      .order("starts_at", { ascending: true })
-      .limit(30),
+      .order("starts_at", { ascending: false })
+      .limit(40),
     auth.supabase.from("resources")
       .select("id, title, resource_type, created_at, owner_id")
       .eq("shared_group_id", id)
@@ -321,12 +329,20 @@ export async function POST(request: Request, context: RouteContext) {
     const now = new Date();
     const fortyFiveMinutesAgo = new Date(Date.now() - 45 * 60 * 1000).toISOString();
 
-    // Auto-complete stale sessions older than 45 minutes so calls are not always active
+    // Complete only sessions whose end time has passed (or older than 2h).
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     await admin.from("study_sessions")
       .update({ status: "completed" })
       .eq("group_id", id)
       .eq("status", "scheduled")
-      .lt("created_at", fortyFiveMinutesAgo);
+      .in("title", ["Instant group call", "Study Group Call"])
+      .lt("ends_at", now.toISOString());
+    await admin.from("study_sessions")
+      .update({ status: "completed" })
+      .eq("group_id", id)
+      .eq("status", "scheduled")
+      .in("title", ["Instant group call", "Study Group Call"])
+      .lt("created_at", twoHoursAgo);
 
     // Check if a call session was recently started for this group
     const { data: existingSession } = await admin.from("study_sessions")
@@ -339,10 +355,11 @@ export async function POST(request: Request, context: RouteContext) {
       .maybeSingle();
 
     let session = existingSession;
+    let postedNewCard = false;
 
     if (!session) {
       const startsAt = now;
-      const endsAt = new Date(startsAt.getTime() + 45 * 60 * 1000);
+      const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000); // 90 min live window
       const roomId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : randomBytes(16).toString("hex");
       const { data, error } = await admin.from("study_sessions")
         .insert({
@@ -358,18 +375,29 @@ export async function POST(request: Request, context: RouteContext) {
         .single();
       if (error || !data) return fail("The group call could not be started.", 503);
       session = data;
-
-      // Post Calling Card in group messages so members see the calling card in chat!
-      try {
-        await admin.from("group_messages").insert({
-          group_id: id,
-          sender_id: auth.user.id,
-          body: `📞 Started a group study call: "${session.title}". Join in! [call:${session.id}]`,
-        });
-      } catch (msgErr) {
-        console.warn("Could not post call announcement to chat:", msgErr);
-      }
+      postedNewCard = true;
+    } else {
+      // Extend the live window so late joiners are not blocked.
+      const extendedEnd = new Date(Math.max(Date.parse(session.ends_at) || 0, now.getTime() + 60 * 60 * 1000)).toISOString();
+      await admin.from("study_sessions")
+        .update({ ends_at: extendedEnd, status: "scheduled" })
+        .eq("id", session.id)
+        .eq("group_id", id);
+      session = { ...session, ends_at: extendedEnd, status: "scheduled" };
     }
+
+    // Always post a fresh join card so members see an active Join button in chat.
+    try {
+      await admin.from("group_messages").insert({
+        group_id: id,
+        sender_id: auth.user.id,
+        body: `📞 Started a group study call: "${session.title}". Join in! [call:${session.id}]`,
+      });
+      postedNewCard = true;
+    } catch (msgErr) {
+      console.warn("Could not post call announcement to chat:", msgErr);
+    }
+    void postedNewCard;
 
     const { data: members, error: membersError } = await admin.from("group_members")
       .select("user_id")
