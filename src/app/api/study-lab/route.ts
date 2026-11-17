@@ -222,7 +222,7 @@ export async function POST(request: Request) {
     ].join("\n\n"), {
       model,
       temperature: 0.2,
-      maxOutputTokens: action === "quiz" ? Math.min(2400, 400 + Number(count) * 150) : action === "flashcards" ? Math.min(1800, 300 + Number(count) * 80) : 1800,
+      maxOutputTokens: action === "quiz" ? Math.min(8192, 600 + Number(count) * 220) : action === "flashcards" ? Math.min(4096, 400 + Number(count) * 120) : 4096,
     });
     raw = generated.text;
     usedModel = generated.model;

@@ -79,6 +79,7 @@ export function AiStudyLab() {
   const [action, setAction] = useState<StudyLabAction>("summary");
   const [difficulty, setDifficulty] = useState("standard");
   const [count, setCount] = useState(8);
+  const [countInput, setCountInput] = useState("8");
   const [instructions, setInstructions] = useState("");
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(true);
@@ -151,6 +152,10 @@ export function AiStudyLab() {
     setNotice("");
     setGenerating(true);
     try {
+      const maxCount = action === "quiz" ? 30 : 20;
+      const parsed = Math.round(Number(countInput));
+      const finalCount = Number.isFinite(parsed) && parsed >= 3 ? Math.min(maxCount, parsed) : 8;
+
       const response = await fetch("/api/study-lab", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,7 +163,7 @@ export function AiStudyLab() {
           action,
           lectureId: selectedSource,
           difficulty,
-          count,
+          count: finalCount,
           instructions,
           question,
         }),
@@ -262,14 +267,43 @@ export function AiStudyLab() {
                 <label className="text-[10px] font-extrabold text-[#5d5768]">DIFFICULTY
                   <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"><option value="introductory">Introductory</option><option value="standard">Standard</option><option value="advanced">Advanced</option></select>
                 </label>
-                {(action === "quiz" || action === "flashcards") && <label className="text-[10px] font-extrabold text-[#5d5768]">{action === "quiz" ? "QUESTION COUNT" : "CARD COUNT"}
-                  <input type="number" min={3} max={action === "quiz" ? 30 : 20} value={count} onChange={(event) => {
-                    const next = Math.round(Number(event.target.value));
-                    const max = action === "quiz" ? 30 : 20;
-                    if (!Number.isFinite(next)) return;
-                    setCount(Math.min(max, Math.max(3, next)));
-                  }} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]" />
-                </label>}
+                {(action === "quiz" || action === "flashcards") && (
+                  <label className="text-[10px] font-extrabold text-[#5d5768]">
+                    {action === "quiz" ? "QUESTION COUNT" : "CARD COUNT"}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="e.g. 10"
+                      value={countInput}
+                      onChange={(event) => {
+                        const val = event.target.value.replace(/[^0-9]/g, "");
+                        setCountInput(val);
+                        const num = Number(val);
+                        if (Number.isFinite(num) && num > 0) {
+                          setCount(num);
+                        }
+                      }}
+                      onBlur={() => {
+                        const max = action === "quiz" ? 30 : 20;
+                        if (!countInput || countInput.trim() === "") {
+                          setCountInput("8");
+                          setCount(8);
+                        } else {
+                          const num = Math.round(Number(countInput));
+                          const clamped = Math.min(max, Math.max(3, num));
+                          setCountInput(String(clamped));
+                          setCount(clamped);
+                        }
+                      }}
+                      className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"
+                    />
+                    <span className="mt-1 flex items-center justify-between text-[10px] font-medium text-[#7a7485]">
+                      <span>Limit: <strong>3</strong> – <strong>{action === "quiz" ? 30 : 20}</strong> {action === "quiz" ? "questions" : "cards"}</span>
+                      <span className="font-bold text-[#7259e8]">{action === "quiz" ? "Max: 30" : "Max: 20"}</span>
+                    </span>
+                  </label>
+                )}
               </div>
               <label className="mt-4 block text-[10px] font-extrabold text-[#5d5768]">OPTIONAL INSTRUCTIONS
                 <input value={instructions} onChange={(event) => setInstructions(event.target.value)} maxLength={1000} placeholder="Focus on definitions, examples, or a particular topic" className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-medium outline-none focus:border-[#aa9af0]" />

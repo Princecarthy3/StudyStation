@@ -226,7 +226,26 @@ export function PlannerOverview({
           {taskEditor && <label className="block text-[10px] font-bold text-[#5d5768]">Status<select name="status" defaultValue={taskEditor.status} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="todo">To do</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>}
         </div>
         {statusMessage && <p role="alert" className="text-[10px] text-[#a44e48]">{statusMessage}</p>}
-        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setTaskEditor(undefined)} className="h-9 rounded-lg px-3 text-[10px] font-bold text-[#777180]">Cancel</button><button disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}{taskEditor ? "Save task" : "Add task"}</button></div>
+        <div className="flex justify-between items-center pt-2">
+          {taskEditor?.id ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Delete “${taskEditor.title}”?`)) {
+                  runAction(() => deleteStudyTask(taskEditor.id));
+                  setTaskEditor(undefined);
+                }
+              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold text-[#a44e48] hover:bg-[#fff1ef] transition-colors"
+            >
+              <Trash2 className="size-3.5" /> Delete task
+            </button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setTaskEditor(undefined)} className="h-9 rounded-lg px-3 text-[10px] font-bold text-[#777180]">Cancel</button>
+            <button disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}{taskEditor ? "Save task" : "Add task"}</button>
+          </div>
+        </div>
       </form>
     </section></div>}
 

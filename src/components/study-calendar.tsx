@@ -18,10 +18,12 @@ import {
   LoaderCircle,
   Plus,
   Sparkles,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
-import { createPlannerEvents, createStudyTask, deletePlannerEvent, savePlannerEvent, updateStudyTask, type PlannerEventInput, type Stage6ActionResult } from "@/app/app/stage6-actions";
+import { createPlannerEvents, createStudyTask, deletePlannerEvent, deleteStudyTask, savePlannerEvent, updateStudyTask, type PlannerEventInput, type Stage6ActionResult } from "@/app/app/stage6-actions";
+import { playNotificationChime } from "@/lib/notifications/sound";
 import type { Stage6Course } from "@/components/stage6-workspace";
 import type { PlannerData, PlannerEvent, PlannerTask } from "@/components/study-planner";
 
@@ -173,6 +175,53 @@ export function StudyCalendar({
   const [preferencesBusy, setPreferencesBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [pending, startTransition] = useTransition();
+
+  const [activeReminders, setActiveReminders] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved = localStorage.getItem("studystation_active_reminders");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggleReminder = async (item: { id: string; title: string; startsAt: string; kind: string }) => {
+    const next = new Set(activeReminders);
+    const isEnabling = !next.has(item.id);
+
+    if (isEnabling) {
+      next.add(item.id);
+      playNotificationChime();
+
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const icon = new URL("/icons/icon-192.png", window.location.origin).href;
+          await reg.showNotification("Study Reminder Active", {
+            body: `Reminder set for: ${item.title}. You'll be notified before it begins!`,
+            icon,
+            badge: icon,
+            tag: `reminder-${item.id}`,
+            silent: false,
+            data: { url: "/app?view=planner" },
+          } as unknown as NotificationOptions);
+        } catch (err) {
+          console.warn("Could not show direct notification:", err);
+        }
+      }
+
+      setStatusMessage(`Reminder set for: ${item.title}`);
+    } else {
+      next.delete(item.id);
+      setStatusMessage(`Reminder muted for: ${item.title}`);
+    }
+
+    setActiveReminders(next);
+    try {
+      localStorage.setItem("studystation_active_reminders", JSON.stringify(Array.from(next)));
+    } catch {}
+  };
   const preferencesDirty = preferences.pace !== data.preferences.pace
     || preferences.sessionMinutes !== data.preferences.sessionMinutes
     || preferences.breakMinutes !== data.preferences.breakMinutes
@@ -194,8 +243,8 @@ export function StudyCalendar({
     })();
   const courseLabels = useMemo(() => new Map(courses.map((course) => [course.id, `${course.code} · ${course.title}`])), [courses]);
   const eventsByDay = useMemo(() => {
-    const values = new Map<string, Array<{ id: string; title: string; startsAt: string; endsAt: string; kind: "event" | "task" | "group"; item: PlannerEvent | null; type: string }>>();
-    const add = (key: string, entry: { id: string; title: string; startsAt: string; endsAt: string; kind: "event" | "task" | "group"; item: PlannerEvent | null; type: string }) => {
+    const values = new Map<string, Array<{ id: string; title: string; startsAt: string; endsAt: string; kind: "event" | "task" | "group"; item: PlannerEvent | null; taskItem?: PlannerTask | null; type: string }>>();
+    const add = (key: string, entry: { id: string; title: string; startsAt: string; endsAt: string; kind: "event" | "task" | "group"; item: PlannerEvent | null; taskItem?: PlannerTask | null; type: string }) => {
       const items = values.get(key) ?? [];
       items.push(entry);
       values.set(key, items);
@@ -218,6 +267,7 @@ export function StudyCalendar({
         endsAt: task.dueAt,
         kind: "task",
         item: null,
+        taskItem: task,
         type: task.status === "completed" ? "completed" : "task",
       });
     });
@@ -577,15 +627,29 @@ export function StudyCalendar({
                           const courseLabel = item.item?.courseId
                             ? courseLabels.get(item.item.courseId)
                             : null;
+                          const isReminderSet = activeReminders.has(item.id);
                           return (
-                            <button
+                            <div
                               key={item.id}
-                              type="button"
-                              onClick={() => item.item && setEventEditor(item.item)}
-                              className="flex w-full items-start justify-between gap-3 text-left"
+                              onClick={() => {
+                                if (item.kind === "task" && item.taskItem) {
+                                  setTaskEditor(item.taskItem);
+                                } else if (item.item) {
+                                  setEventEditor(item.item);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  if (item.kind === "task" && item.taskItem) setTaskEditor(item.taskItem);
+                                  else if (item.item) setEventEditor(item.item);
+                                }
+                              }}
+                              className="group flex w-full cursor-pointer items-start justify-between gap-3 text-left rounded-xl p-1.5 -ml-1.5 hover:bg-[#fbfaff] transition-colors"
                             >
                               <div className="min-w-0">
-                                <p className="text-[15px] font-extrabold leading-snug text-[#17132d] sm:text-[16px]">
+                                <p className="text-[15px] font-extrabold leading-snug text-[#17132d] sm:text-[16px] group-hover:text-[#7259e8] transition-colors">
                                   {item.title}
                                 </p>
                                 <p className="mt-1 text-[12px] font-semibold text-[#6e677c]">
@@ -598,10 +662,23 @@ export function StudyCalendar({
                                   </p>
                                 )}
                               </div>
-                              <span className="grid size-9 shrink-0 place-items-center rounded-full text-[#b0a9bc]">
-                                <Bell className="size-4" />
-                              </span>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void toggleReminder(item);
+                                }}
+                                aria-label={isReminderSet ? `Mute reminder for ${item.title}` : `Set reminder for ${item.title}`}
+                                title={isReminderSet ? "Click to mute reminder" : "Click to set reminder notification"}
+                                className={`grid size-9 shrink-0 place-items-center rounded-full transition-all ${
+                                  isReminderSet
+                                    ? "bg-[#7259e8]/15 text-[#7259e8] ring-2 ring-[#7259e8]/30 shadow-sm"
+                                    : "text-[#b0a9bc] hover:bg-[#f3f0ff] hover:text-[#7259e8]"
+                                }`}
+                              >
+                                <Bell className={`size-4 ${isReminderSet ? "fill-current" : ""}`} />
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -748,7 +825,33 @@ export function StudyCalendar({
           {taskEditor && <label className="block text-[10px] font-bold">Status<select name="status" defaultValue={taskEditor.status} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-2 text-[10px]"><option value="todo">To do</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>}
         </div>
         {statusMessage && <p role="alert" className="text-[9px] text-[#a44e48]">{statusMessage}</p>}
-        <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setTaskEditor(undefined)} className="h-9 rounded-lg px-3 text-[10px] font-bold text-[#777180]">Cancel</button><button disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}{taskEditor ? "Save task" : "Add task"}</button></div>
+        <div className="flex justify-between items-center pt-2">
+          {taskEditor?.id ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Delete “${taskEditor.title}”?`)) {
+                  setStatusMessage("");
+                  startTransition(async () => {
+                    const result = await deleteStudyTask(taskEditor.id);
+                    setStatusMessage(result.error ?? result.success ?? "Task deleted.");
+                    if (!result.error) {
+                      setTaskEditor(undefined);
+                      router.refresh();
+                    }
+                  });
+                }
+              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[10px] font-bold text-[#a44e48] hover:bg-[#fff1ef] transition-colors"
+            >
+              <Trash2 className="size-3.5" /> Delete task
+            </button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setTaskEditor(undefined)} className="h-9 rounded-lg px-3 text-[10px] font-bold text-[#777180]">Cancel</button>
+            <button disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}{taskEditor ? "Save task" : "Add task"}</button>
+          </div>
+        </div>
       </form>
     </section></div>}
 

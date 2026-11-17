@@ -26,12 +26,32 @@ export function getGeminiStudyModel(): string {
   return (
     process.env.GEMINI_STUDY_MODEL?.trim() ||
     process.env.GEMINI_MODEL?.trim() ||
-    "gemini-3.5-flash-lite"
+    "gemini-2.5-flash"
+  );
+}
+
+const FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-1.5-flash",
+  "gemini-3.5-flash-lite",
+];
+
+function isHighDemandOrTemporaryError(status: number, message: string): boolean {
+  if (status === 503 || status === 429 || status === 404) return true;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("high demand") ||
+    lower.includes("spikes in demand") ||
+    lower.includes("temporarily unavailable") ||
+    lower.includes("resource has been exhausted") ||
+    lower.includes("overloaded") ||
+    lower.includes("rate limit")
   );
 }
 
 /**
- * Universal chat completion using Google Gemini API.
+ * Universal chat completion using Google Gemini API with automatic high-demand failover.
  * Supports system instructions, multi-turn messages, custom token limits, and JSON mode.
  */
 export async function geminiChat(
@@ -41,12 +61,15 @@ export async function geminiChat(
     temperature?: number;
     maxOutputTokens?: number;
     responseMimeType?: string;
+    triedModels?: string[];
   }
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured on the server");
 
   const model = options?.model ?? getGeminiStudyModel();
+  const triedModels = new Set(options?.triedModels ?? []);
+  triedModels.add(model);
 
   // Extract system messages and conversation messages
   const systemMessages = messages.filter((m) => m.role === "system");
@@ -73,14 +96,22 @@ export async function geminiChat(
     });
   }
 
+  // thinkingConfig is only valid on models supporting reasoning (e.g. gemini-2.5+, gemini-3+)
+  const supportsThinking = model.startsWith("gemini-2.5") || model.startsWith("gemini-3");
+  const generationConfig: Record<string, unknown> = {
+    temperature: options?.temperature ?? 0.25,
+    maxOutputTokens: options?.maxOutputTokens ?? 4096,
+    ...(options?.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
+  };
+  if (supportsThinking) {
+    generationConfig.thinkingConfig = {
+      thinkingLevel: model.includes("flash-lite") ? "minimal" : "low",
+    };
+  }
+
   const payload: Record<string, unknown> = {
     contents,
-    generationConfig: {
-      temperature: options?.temperature ?? 0.25,
-      maxOutputTokens: options?.maxOutputTokens ?? 4096,
-      ...(options?.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
-      thinkingConfig: { thinkingLevel: model.includes("flash-lite") ? "minimal" : "low" },
-    },
+    generationConfig,
   };
 
   if (systemText && contents.length > 0 && contents[0].parts[0].text !== systemText) {
@@ -91,30 +122,64 @@ export async function geminiChat(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(60_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (fetchErr) {
+    // If network/timeout fails, check if another fallback model can be tried
+    const nextModel = FALLBACK_MODELS.find((m) => !triedModels.has(m));
+    if (nextModel) {
+      console.warn(`[Gemini] Network error on ${model}, falling back to ${nextModel}...`);
+      return geminiChat(messages, {
+        ...options,
+        model: nextModel,
+        triedModels: Array.from(triedModels),
+      });
+    }
+    throw fetchErr;
+  }
 
   const data = (await response.json().catch(() => null)) as GeminiResponse | null;
-  if (!data) throw new Error(`Gemini returned an unreadable response (${response.status})`);
-  
-  if (!response.ok) {
-    // If the configured model is unavailable (e.g., 404), fallback to gemini-2.5-flash or gemini-3.8-flash
-    if (response.status === 404 && model !== "gemini-2.5-flash") {
-      return geminiChat(messages, { ...options, model: "gemini-2.5-flash" });
+  const errorMessage = data?.error?.message ?? `HTTP ${response.status}`;
+
+  if (!response.ok || !data) {
+    // If the model is experiencing high demand (503), quota (429), or 404, fallback to next healthy model
+    if (isHighDemandOrTemporaryError(response.status, errorMessage)) {
+      const nextModel = FALLBACK_MODELS.find((m) => !triedModels.has(m));
+      if (nextModel) {
+        console.warn(`[Gemini] Model ${model} is experiencing high demand (${errorMessage}). Falling back to ${nextModel}...`);
+        // Brief 800ms backoff before switching
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        return geminiChat(messages, {
+          ...options,
+          model: nextModel,
+          triedModels: Array.from(triedModels),
+        });
+      }
     }
-    throw new Error(data.error?.message ?? `Gemini request failed (${response.status})`);
+    throw new Error(errorMessage);
   }
 
   const candidate = data.candidates?.[0];
   const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("").trim();
   if (!text) {
+    // Empty output or filtered; try next model
+    const nextModel = FALLBACK_MODELS.find((m) => !triedModels.has(m));
+    if (nextModel) {
+      return geminiChat(messages, {
+        ...options,
+        model: nextModel,
+        triedModels: Array.from(triedModels),
+      });
+    }
     throw new Error(`Gemini returned an empty response${candidate?.finishReason ? ` (${candidate.finishReason})` : ""}`);
   }
 
@@ -122,7 +187,7 @@ export async function geminiChat(
 }
 
 /**
- * Structured JSON generator using Google Gemini.
+ * Structured JSON generator using Google Gemini with model resilience.
  */
 export async function geminiGenerateJson(
   prompt: string,
