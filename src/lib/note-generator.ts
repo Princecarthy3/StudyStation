@@ -1,5 +1,5 @@
 import { hasOpenRouterKey, openRouterChat, parseJsonObject } from "@/lib/openrouter";
-import { hasGeminiKey, getGeminiStudyModel } from "@/lib/gemini";
+import { hasGeminiKey, geminiGenerateJson } from "@/lib/gemini";
 
 export type OrganizedKeyTerm = {
   term: string;
@@ -144,40 +144,15 @@ function generateStructuredFallback(transcript: string, title: string, courseTit
 }
 
 /**
- * Call Gemini API directly if GEMINI_API_KEY is configured
+ * Call Gemini API directly with automatic model resilience and generous token ceiling.
  */
 async function callGeminiForNotes(prompt: string): Promise<OrganizedNoteContent> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-
-  const model = getGeminiStudyModel();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-      },
-    }),
-    signal: AbortSignal.timeout(90_000),
+  const { text } = await geminiGenerateJson(prompt, {
+    temperature: 0.2,
+    maxOutputTokens: 8192,
   });
-
-  const data = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    throw new Error(data.error?.message ?? `Gemini notes generation failed (${response.status})`);
-  }
-
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) throw new Error("Gemini returned an empty response");
-  return parseJsonObject<OrganizedNoteContent>(rawText);
+  if (!text) throw new Error("Gemini returned an empty response");
+  return parseJsonObject<OrganizedNoteContent>(text);
 }
 
 /**
@@ -194,52 +169,69 @@ export async function generateOrganizedNote(params: {
     throw new Error("Cannot generate notes from an empty transcript.");
   }
 
-  // Truncate to safe model context limit (approx ~18,000 words / 80k chars)
-  const clippedTranscript = transcript.slice(0, 80_000);
+  // Support comprehensive multi-page documents (up to ~300k chars / ~50k words)
+  const clippedTranscript = transcript.slice(0, 300_000);
 
-  const systemInstructions = `You are StudyStation's academic AI study assistant. Your job is to transform a raw, spoken lecture transcript into organized, comprehensive, professional university-level study notes.
+  const systemInstructions = `You are StudyStation's expert academic AI professor and study coach.
+Your job is to transform the provided source document or lecture into organized, comprehensive, university-grade study notes.
+
+CRITICAL INSTRUCTIONS ON CONTENT SYNTHESIS & ANTI-META DIRECTIVE:
+1. STRICT ZERO META-COMMENTARY RULE:
+   - NEVER write meta-commentary about the pages, slides, or document structure.
+   - ABSOLUTELY FORBIDDEN PHRASES: "Page 1 introduces...", "Slide 2 outlines...", "This slide presents...", "The document describes...", "The presentation covers...", "As stated in the outline...".
+   - Treat the input as a unified academic textbook or masterclass lecture. Teach the ACTUAL SUBJECT MATTER directly to the student.
+   - If the material includes slide or page markers (such as "--- Page 1 ---" or "--- Slide 2 ---"), IGNORE them completely and NEVER mention pages or slides in your output.
+   - If the beginning contains an outline, agenda, or title slide, DO NOT summarize it as an agenda. Immediately synthesize the core technical substance, theories, principles, and applications found throughout the entire document.
+
+2. DEPTH, SUBSTANCE, AND RIGOR:
+   - Provide concrete, rigorous explanations of underlying concepts, theories, principles, mechanisms, and real-world examples.
+   - Explain the "how" and "why" behind concepts in substantive, clear paragraphs. Do NOT produce superficial one-sentence summaries.
+   - For mathematical, engineering, or scientific topics, include relevant formulas, step-by-step mechanisms, and derivations. Format all mathematical and scientific notation in LaTeX ($...$ for inline expressions, $$...$$ for standalone equations). Ensure all LaTeX backslashes are properly escaped in JSON (e.g. \\\\frac{a}{b}, \\\\Delta, \\\\theta).
+
+3. COMPLETE THEMATIC SYNTHESIS:
+   - Synthesize the ENTIRE document from first principles to the final conclusions. Group related sections into cohesive thematic units (3 to 7 thematic sections).
 
 Structure the response strictly as valid JSON with this exact schema:
 {
-  "title": "Clear, informative note title reflecting the actual lecture content",
-  "summary": "2 to 3 paragraph executive summary explaining the main lecture thesis, context, and core concepts",
+  "title": "Clear, informative note title reflecting the actual subject matter",
+  "summary": "2 to 4 detailed paragraphs providing an executive academic summary of the core thesis, foundational theories, and major analytical frameworks presented across the material",
   "keyTerms": [
     {
       "term": "Term Name",
-      "definition": "Precise, student-friendly academic definition based on how it was used in lecture"
+      "definition": "Precise, thorough academic definition explaining what it is, how it works, and its significance"
     }
   ],
   "sections": [
     {
-      "heading": "1. Section Heading",
-      "body": "Comprehensive explanation of this lecture topic in clear paragraphs",
-      "bullets": ["Specific point or example 1", "Specific point or example 2"],
-      "takeaways": ["Crucial insight 1"]
+      "heading": "1. Thematic Section Heading",
+      "body": "In-depth, comprehensive explanation of this topic in thorough paragraphs explaining mechanisms, core principles, and analytical nuance",
+      "bullets": ["Concrete application, proof, or key detail 1", "Concrete application, proof, or key detail 2"],
+      "takeaways": ["Essential conceptual insight for exam preparation"]
     }
   ],
   "takeaways": [
     "High-yield exam takeaway 1",
     "High-yield exam takeaway 2",
-    "High-yield exam takeaway 3"
+    "High-yield exam takeaway 3",
+    "High-yield exam takeaway 4"
   ],
   "studyQuestions": [
     {
-      "question": "Concept check question students can use for active recall?",
-      "answer": "Concise, accurate model answer from the lecture"
+      "question": "Deep active-recall concept question testing understanding of mechanisms or trade-offs?",
+      "answer": "Thorough, accurate model answer explaining the principle and reasoning"
     }
   ],
   "actionChecklist": [
-    "Actionable revision step 1",
-    "Actionable revision step 2"
+    "Concrete revision task or practice problem to test mastery",
+    "Specific concept or formula derivation to practice without notes"
   ]
 }
 
 Guidelines:
-- Ground every section and definition in the provided lecture transcript. Do not hallucinate outside facts.
-- Identify 3 to 6 logical thematic sections based on the natural flow of the lecture.
-- Extract 4 to 8 critical technical or academic key terms.
-- Provide 3 to 5 active recall study questions with model answers.
-- Write mathematical expressions in LaTeX, using $...$ for inline expressions and $$...$$ for standalone equations so they can be rendered clearly. Escape LaTeX backslashes for valid JSON strings (for example, write \\\\frac in JSON).
+- Ground every section and definition in the provided lecture or document. Do not hallucinate outside facts.
+- Identify 3 to 7 logical thematic sections based on the natural flow of the material.
+- Extract 5 to 10 critical technical or academic key terms with substantive definitions.
+- Provide 4 to 6 active recall study questions with detailed model answers.
 - Output ONLY valid JSON. No markdown backticks or commentary outside the JSON object.`;
 
   const userPrompt = `LECTURE TITLE: "${title}"
@@ -278,7 +270,7 @@ ${clippedTranscript}`;
           { role: "system", content: systemInstructions },
           { role: "user", content: userPrompt },
         ],
-        { model, temperature: 0.2, maxTokens: 4000 }
+        { model, temperature: 0.2, maxTokens: 6000 }
       );
       const parsed = parseJsonObject<OrganizedNoteContent>(raw);
       if (parsed.summary && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
