@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-const MAX_FILE_SIZE = 150 * 1024 * 1024;
+const MAX_FILE_SIZE = 400 * 1024 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const supportedFiles: Record<string, { sourceType: "audio" | "video" | "recording" | "document"; extensions: string[] }> = {
   "audio/mpeg": { sourceType: "audio", extensions: ["mp3"] },
@@ -38,6 +38,7 @@ type UploadRequest = {
   fileSize?: unknown;
   sourceType?: unknown;
   durationSeconds?: unknown;
+  partCount?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "The selected file is empty or invalid." }, { status: 400 });
   }
   if (fileSize > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: "Lecture files must be 150 MB or smaller." }, { status: 413 });
+    return NextResponse.json({ error: "Lecture files must be 400 MB or smaller." }, { status: 413 });
   }
 
   const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
@@ -138,7 +139,10 @@ export async function POST(request: Request) {
   }
 
   const lectureId = crypto.randomUUID();
-  const storagePath = `${user.id}/${lectureId}/${lectureId}.${extension}`;
+  const partCount = typeof body.partCount === "number" && body.partCount > 1 ? Math.min(40, Math.floor(body.partCount)) : 1;
+  const storagePath = partCount > 1
+    ? `${user.id}/${lectureId}/part-000.wav`
+    : `${user.id}/${lectureId}/${lectureId}.${extension}`;
   let admin;
   try {
     admin = createAdminClient();
@@ -164,7 +168,7 @@ export async function POST(request: Request) {
     title,
     source_type: body.sourceType === "recording" ? "recording" : fileType.sourceType,
     storage_path: storagePath,
-    mime_type: resolvedMime || mimeType,
+    mime_type: partCount > 1 ? "audio/wav" : (resolvedMime || mimeType),
     status: "uploaded",
     duration_seconds: durationSeconds,
   });
@@ -185,6 +189,8 @@ export async function POST(request: Request) {
     storagePath,
     uploadToken: signedUpload.token,
     bucket: "lecture-media",
+    partCount,
     message: "Your original media is stored in a private bucket.",
   }, { status: 201 });
 }
+

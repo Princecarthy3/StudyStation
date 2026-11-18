@@ -213,7 +213,7 @@ async function splitLongMedia(bytes: Buffer, mimeType: string): Promise<Array<{ 
   if ((mime === "audio/wav" || mime === "audio/x-wav") && bytes.length >= 44) {
     const header = bytes.subarray(0, 44);
     const data = bytes.subarray(44);
-    const piece = Math.max(1_000_000, PROVIDER_CHUNK_BYTES - 44);
+    const piece = Math.max(1_000_000, Math.min(PROVIDER_CHUNK_BYTES - 44, 14 * 1024 * 1024));
     const chunks: Array<{ bytes: Buffer; mimeType: string }> = [];
     for (let offset = 0; offset < data.length; offset += piece) {
       const body = data.subarray(offset, offset + piece);
@@ -309,7 +309,9 @@ export async function transcribeLectureMedia(input: {
     let text = "";
     const errors: string[] = [];
 
-    if (process.env.GROQ_API_KEY?.trim()) {
+    // Groq Whisper rejects uploads over ~25 MB — skip it for oversized buffers.
+    const groqOk = bytes.length <= 24 * 1024 * 1024;
+    if (groqOk && process.env.GROQ_API_KEY?.trim()) {
       try {
         text = await transcribeWithGroq({ bytes, cleanMime });
       } catch (groqError) {
@@ -317,6 +319,8 @@ export async function transcribeLectureMedia(input: {
         console.warn("Groq transcription failed, trying next provider:", msg);
         errors.push(`Groq: ${msg}`);
       }
+    } else if (!groqOk) {
+      errors.push("Groq: skipped (audio larger than 24 MB — using chunked/Gemini path)");
     }
 
     if (!text && process.env.GEMINI_API_KEY?.trim()) {
@@ -364,7 +368,15 @@ export async function transcribeLectureMedia(input: {
     }
 
     if (!text || !text.trim()) {
-      if (errors.length > 0) throw new Error(`Transcription failed: ${errors[0]}`);
+      if (errors.length > 0) {
+        const oversized = errors.some((e) => /too large|entity too large|24 MB|25 MB/i.test(e));
+        if (oversized) {
+          throw new Error(
+            "This recording is too large for a single transcription pass. Re-record or re-upload after updating the app — long lectures are split automatically into parts (up to ~2 hours).",
+          );
+        }
+        throw new Error(`Transcription failed: ${errors[0]}`);
+      }
       throw new Error("No speech could be detected in this recording, or transcription is not configured. Add a free GROQ_API_KEY in .env.local.");
     }
     return text.trim();

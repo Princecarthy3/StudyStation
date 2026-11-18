@@ -7,7 +7,7 @@ import { extractDocumentText } from "@/lib/document-extractor";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const MAX_FILE_SIZE = 150 * 1024 * 1024;
+const MAX_FILE_SIZE = 400 * 1024 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type ProcessRequest = { lectureId?: unknown };
 
@@ -110,14 +110,77 @@ export async function POST(request: Request) {
   try {
     // Prefer service-role download so transcription is not blocked by storage RLS edge cases.
     const storageClient = admin ?? supabase;
+    const storagePath = lecture.storage_path as string;
+    const isMultiPart = /\/part-000\.wav$/i.test(storagePath);
+
+    if (isMultiPart) {
+      const folder = storagePath.replace(/\/part-000\.wav$/i, "");
+      const { data: listed, error: listError } = await storageClient.storage
+        .from("lecture-media")
+        .list(folder, { limit: 40, sortBy: { column: "name", order: "asc" } });
+      if (listError) throw new Error(`Could not list lecture parts (${listError.message}).`);
+      const partNames = (listed ?? [])
+        .map((item) => item.name)
+        .filter((name) => /^part-\d+\.wav$/i.test(name))
+        .sort();
+      if (!partNames.length) throw new Error("No lecture audio parts were found for this recording.");
+
+      let courseTitle = "";
+      if (lecture.course_id) {
+        const { data: course } = await supabase.from("courses").select("title").eq("id", lecture.course_id).eq("user_id", user.id).maybeSingle();
+        courseTitle = course?.title ?? "";
+      }
+
+      const partTexts: string[] = [];
+      for (let i = 0; i < partNames.length; i += 1) {
+        const name = partNames[i];
+        await admin
+          .from("lectures")
+          .update({ processing_error: `Transcribing part ${i + 1} of ${partNames.length}…`, updated_at: new Date().toISOString() })
+          .eq("id", lecture.id)
+          .eq("user_id", user.id)
+          .eq("status", "processing");
+        const { data: partObj, error: partErr } = await storageClient.storage
+          .from("lecture-media")
+          .download(`${folder}/${name}`);
+        if (partErr || !partObj) throw new Error(`Could not read ${name} for transcription.`);
+        const partBytes = Buffer.from(await partObj.arrayBuffer());
+        if (partBytes.length < 1) continue;
+        const partResult = await transcribeLectureMedia({
+          bytes: partBytes,
+          mimeType: "audio/wav",
+          sourceType: lecture.source_type as LectureMediaType,
+          title: `${lecture.title} (part ${i + 1}/${partNames.length})`,
+          courseTitle,
+        });
+        if (partResult.text?.trim()) partTexts.push(partResult.text.trim());
+      }
+
+      const cleanTranscript = partTexts.join("\n\n").trim();
+      if (!cleanTranscript) throw new Error("No speech was detected in the uploaded media.");
+      const { error: saveMultiError } = await admin
+        .from("lectures")
+        .update({
+          transcript: cleanTranscript,
+          transcript_segments: [],
+          status: "ready",
+          processing_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", lecture.id)
+        .eq("user_id", user.id);
+      if (saveMultiError) throw new Error(saveMultiError.message || "Failed to save transcript.");
+      return NextResponse.json({ lectureId: lecture.id, status: "ready", parts: partNames.length });
+    }
+
     const { data: object, error: downloadError } = await storageClient.storage
       .from("lecture-media")
-      .download(lecture.storage_path);
+      .download(storagePath);
     if (downloadError || !object) {
       const detail = downloadError?.message ? ` (${downloadError.message})` : "";
       throw new Error(`The uploaded file could not be read${detail}. Re-upload the recording if this continues.`);
     }
-    if (object.size < 1 || object.size > MAX_FILE_SIZE) throw new Error("The uploaded file is empty or exceeds the 150 MB limit.");
+    if (object.size < 1 || object.size > MAX_FILE_SIZE) throw new Error("The uploaded file is empty or exceeds the 400 MB limit.");
 
     const bytes = Buffer.from(await object.arrayBuffer());
 

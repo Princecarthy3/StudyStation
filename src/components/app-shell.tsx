@@ -213,46 +213,9 @@ function EmptySearch({ query }: { query: string }) {
 
 /** Cap live-recording bitrate so typical lectures stay under transcription size limits. */
 const LIVE_RECORDING_BITS_PER_SECOND = 48_000;
-
-/**
- * If a recording blob is too large for a single Whisper pass (~24 MB), re-encode
- * to mono 16 kHz WAV in the browser so server-side splitting is not required.
- */
-async function compressLectureAudioIfNeeded(blob: Blob, maxBytes = 22 * 1024 * 1024): Promise<File> {
-  const nameBase = "live-recording";
-  if (blob.size <= maxBytes) {
-    const ext = blob.type.includes("mp4") || blob.type.includes("m4a") ? "m4a" : blob.type.includes("wav") ? "wav" : "webm";
-    return new File([blob], `${nameBase}.${ext}`, { type: blob.type || "audio/webm" });
-  }
-
-  try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) throw new Error("AudioContext unavailable");
-    const arrayBuffer = await blob.arrayBuffer();
-    const decodeCtx = new AudioCtx();
-    const decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
-    await decodeCtx.close().catch(() => undefined);
-
-    const targetRate = 16000;
-    const ratio = decoded.sampleRate / targetRate;
-    const newLen = Math.max(1, Math.floor(decoded.length / ratio));
-    const pcm = new Float32Array(newLen);
-    const channels = decoded.numberOfChannels;
-    for (let i = 0; i < newLen; i += 1) {
-      const srcIndex = Math.min(decoded.length - 1, Math.floor(i * ratio));
-      let sum = 0;
-      for (let c = 0; c < channels; c += 1) sum += decoded.getChannelData(c)[srcIndex] || 0;
-      pcm[i] = sum / channels;
-    }
-    const wav = encodePcmToWav(pcm, targetRate);
-    // 16 kHz mono 16-bit is ~2 MB per 10 minutes — well under provider limits.
-    return new File([wav], `${nameBase}.wav`, { type: "audio/wav" });
-  } catch (error) {
-    console.warn("Client audio compress failed, uploading original:", error);
-    const ext = blob.type.includes("wav") ? "wav" : "webm";
-    return new File([blob], `${nameBase}.${ext}`, { type: blob.type || "audio/webm" });
-  }
-}
+/** ~7 minutes of 16 kHz mono 16-bit WAV stays under Groq's 25 MB limit. */
+const TRANSCRIBE_CHUNK_SECONDS = 7 * 60;
+const TRANSCRIBE_TARGET_RATE = 16_000;
 
 function encodePcmToWav(samples: Float32Array, sampleRate: number): Blob {
   const numChannels = 1;
@@ -280,12 +243,78 @@ function encodePcmToWav(samples: Float32Array, sampleRate: number): Blob {
   view.setUint32(40, dataSize, true);
   let offset = 44;
   for (let i = 0; i < samples.length; i += 1) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    const sample = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
     offset += 2;
   }
   return new Blob([buffer], { type: "audio/wav" });
 }
+
+async function decodeBlobToMonoPcm(blob: Blob): Promise<{ pcm: Float32Array; sampleRate: number }> {
+  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) throw new Error("AudioContext unavailable");
+  const arrayBuffer = await blob.arrayBuffer();
+  const decodeCtx = new AudioCtx();
+  try {
+    const decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+    const ratio = decoded.sampleRate / TRANSCRIBE_TARGET_RATE;
+    const newLen = Math.max(1, Math.floor(decoded.length / ratio));
+    const pcm = new Float32Array(newLen);
+    const channels = decoded.numberOfChannels;
+    for (let i = 0; i < newLen; i += 1) {
+      const srcIndex = Math.min(decoded.length - 1, Math.floor(i * ratio));
+      let sum = 0;
+      for (let c = 0; c < channels; c += 1) sum += decoded.getChannelData(c)[srcIndex] || 0;
+      pcm[i] = sum / channels;
+    }
+    return { pcm, sampleRate: TRANSCRIBE_TARGET_RATE };
+  } finally {
+    await decodeCtx.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Prepare lecture audio for transcription:
+ * - Resample to mono 16 kHz WAV (Whisper-friendly, smaller)
+ * - Split into ≤7-minute parts so each is under the ~25 MB provider limit
+ * Supports lectures up to ~2 hours (and beyond) without server ffmpeg.
+ */
+async function prepareAudioForTranscription(blob: Blob): Promise<File[]> {
+  // Small files that are already compact can go straight through.
+  if (blob.size <= 18 * 1024 * 1024 && (blob.type.includes("wav") || blob.type.includes("mpeg") || blob.type.includes("mp3"))) {
+    const ext = blob.type.includes("wav") ? "wav" : "mp3";
+    return [new File([blob], `live-recording.${ext}`, { type: blob.type || `audio/${ext}` })];
+  }
+
+  try {
+    const { pcm, sampleRate } = await decodeBlobToMonoPcm(blob);
+    const samplesPerChunk = Math.floor(TRANSCRIBE_CHUNK_SECONDS * sampleRate);
+    const files: File[] = [];
+    for (let offset = 0, part = 0; offset < pcm.length; offset += samplesPerChunk, part += 1) {
+      const slice = pcm.subarray(offset, Math.min(pcm.length, offset + samplesPerChunk));
+      if (slice.length < sampleRate * 0.4) continue; // skip tiny trailing noise
+      const wav = encodePcmToWav(slice, sampleRate);
+      files.push(new File([wav], `lecture-part-${String(part).padStart(3, "0")}.wav`, { type: "audio/wav" }));
+    }
+    if (files.length) return files;
+  } catch (error) {
+    console.warn("Audio prepare/split failed, uploading original:", error);
+  }
+
+  const ext = blob.type.includes("wav") ? "wav" : blob.type.includes("mp4") || blob.type.includes("m4a") ? "m4a" : "webm";
+  return [new File([blob], `live-recording.${ext}`, { type: blob.type || `audio/${ext}` })];
+}
+
+async function compressLectureAudioIfNeeded(blob: Blob, maxBytes = 22 * 1024 * 1024): Promise<File> {
+  const parts = await prepareAudioForTranscription(blob);
+  // Prefer a single file when under the limit; otherwise first part (caller should use prepareAudioForTranscription for multi-part).
+  if (parts.length === 1) return parts[0];
+  // Concatenate is not possible without exceeding limits — return first and log; multi-part path uses prepareAudioForTranscription.
+  if (parts[0].size <= maxBytes) return parts[0];
+  return parts[0];
+}
+
+
 
 
 export function AppShell({
@@ -902,14 +931,17 @@ export function AppShell({
     setInterimTranscript("");
   }
 
-  async function submitLecture(file: File, requestedTitle?: string, sourceType?: "recording", durationSeconds?: number) {
+  async function submitLecture(fileOrParts: File | File[], requestedTitle?: string, sourceType?: "recording", durationSeconds?: number) {
     setProcessing(true);
     try {
+      const parts = Array.isArray(fileOrParts) ? fileOrParts : [fileOrParts];
+      const file = parts[0];
+      if (!file) throw new Error("No audio file to upload.");
       const derivedFromFile = file.name
         .replace(/\.[^.]+$/, "")
         .replace(/[-_]+/g, " ")
         .trim();
-      const isGenericFileName = !derivedFromFile || /^live recording$/i.test(derivedFromFile);
+      const isGenericFileName = !derivedFromFile || /^live recording$/i.test(derivedFromFile) || /^lecture-part/i.test(derivedFromFile);
       const course = courseValue ? courseMap.get(courseValue) : null;
       const stamp = new Intl.DateTimeFormat(undefined, {
         month: "short",
@@ -925,17 +957,19 @@ export function AppShell({
         lectureTitle.trim() ||
         (!isGenericFileName ? derivedFromFile : "") ||
         smartFallback;
+      const totalSize = parts.reduce((sum, part) => sum + part.size, 0);
       const createResponse = await fetch("/api/lectures", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title || smartFallback,
           courseId: courseValue || null,
-          fileName: file.name,
-          mimeType: file.type,
-          fileSize: file.size,
+          fileName: parts.length > 1 ? "lecture-part-000.wav" : file.name,
+          mimeType: parts.length > 1 ? "audio/wav" : file.type,
+          fileSize: totalSize,
           sourceType,
           durationSeconds: durationSeconds ?? (sourceType === "recording" && recordingSeconds > 0 ? recordingSeconds : undefined),
+          partCount: parts.length > 1 ? parts.length : undefined,
         }),
       });
       const created = (await createResponse.json()) as {
@@ -944,6 +978,7 @@ export function AppShell({
         storagePath?: string;
         uploadToken?: string;
         bucket?: string;
+        partCount?: number;
       };
       if (!createResponse.ok || !created.lectureId || !created.storagePath || !created.uploadToken || !created.bucket) {
         throw new Error(created.error || "The lecture upload could not be initialized.");
@@ -969,8 +1004,24 @@ export function AppShell({
         // Some supabase-js versions return empty data on success; only fail when error is set.
       }
 
+      // Upload remaining WAV parts for long lectures (path pattern .../part-000.wav).
+      if (parts.length > 1 && created.storagePath.includes("part-000")) {
+        for (let i = 1; i < parts.length; i += 1) {
+          const partPath = created.storagePath.replace(/part-000\.wav$/i, `part-${String(i).padStart(3, "0")}.wav`);
+          const { error: partError } = await supabase.storage
+            .from(created.bucket)
+            .upload(partPath, parts[i], {
+              contentType: "audio/wav",
+              upsert: true,
+            });
+          if (partError) {
+            throw new Error(partError.message || `Could not upload lecture part ${i + 1}.`);
+          }
+        }
+      }
+
       const isDoc = /\.(pdf|docx|doc|pptx|ppt|txt|md|rtf)$/i.test(file.name);
-      const isLikelyLong = !isDoc && file.size > 20 * 1024 * 1024;
+      const isLikelyLong = !isDoc && (parts.length > 1 || totalSize > 20 * 1024 * 1024);
 
       // For long media, kick off transcription and return control to the UI immediately.
       // The server keeps running (up to maxDuration), writes part progress into processing_error,
@@ -1090,17 +1141,18 @@ export function AppShell({
     const fallbackTitle = course
       ? `${course.code} lecture · ${stamp}`
       : `Lecture · ${stamp}`;
-    let file: File;
+    showToast("Preparing audio for transcription…", "info");
+    let parts: File[];
     try {
-      if (recordedBlob.size > 18 * 1024 * 1024) {
-        showToast("Preparing a lighter audio file for transcription…", "info");
-      }
-      file = await compressLectureAudioIfNeeded(recordedBlob, 22 * 1024 * 1024);
+      parts = await prepareAudioForTranscription(recordedBlob);
     } catch {
-      file = new File([recordedBlob], `live-recording.${extension}`, { type: mimeType });
+      parts = [new File([recordedBlob], `live-recording.${extension}`, { type: mimeType })];
+    }
+    if (parts.length > 1) {
+      showToast(`Long lecture · uploading ${parts.length} parts for reliable transcription…`, "info");
     }
     await submitLecture(
-      file,
+      parts,
       title?.trim() || lectureTitle.trim() || fallbackTitle,
       "recording",
       recordingSeconds
@@ -1109,9 +1161,9 @@ export function AppShell({
 
   async function handleUpload(file?: File, title?: string) {
     if (!file) return;
-    const maxSize = 150 * 1024 * 1024;
+    const maxSize = 400 * 1024 * 1024;
     if (file.size > maxSize) {
-      showToast("Lecture files must be 150 MB or smaller.", "error");
+      showToast("Lecture files must be 400 MB or smaller.", "error");
       return;
     }
     const isDoc = /\.(pdf|docx|doc|pptx|ppt|txt|md|rtf)$/i.test(file.name)
@@ -1119,16 +1171,19 @@ export function AppShell({
       || file.type.includes("document")
       || file.type.includes("presentation")
       || file.type.startsWith("text/");
-    let ready = file;
-    if (!isDoc && file.size > 22 * 1024 * 1024 && (file.type.startsWith("audio/") || file.type.startsWith("video/") || !file.type)) {
+    let parts: File[] = [file];
+    if (!isDoc && (file.type.startsWith("audio/") || file.type.startsWith("video/") || !file.type)) {
       try {
-        showToast("Compressing audio for reliable transcription…", "info");
-        ready = await compressLectureAudioIfNeeded(file, 22 * 1024 * 1024);
+        showToast("Preparing audio for transcription…", "info");
+        parts = await prepareAudioForTranscription(file);
+        if (parts.length > 1) {
+          showToast(`Long lecture · uploading ${parts.length} parts…`, "info");
+        }
       } catch {
-        ready = file;
+        parts = [file];
       }
     }
-    await submitLecture(ready, title);
+    await submitLecture(parts, title);
   }
 
   async function askAssistant(question?: string, specificLectureId?: string) {
