@@ -281,6 +281,7 @@ export function StudyCalendar({
   const [planOpen, setPlanOpen] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState("");
+  const [planNotes, setPlanNotes] = useState("");
   const [planDraft, setPlanDraft] = useState<DraftCalendarEvent[]>([]);
   const [planStart, setPlanStart] = useState(todayKey);
   const [planEnd, setPlanEnd] = useState(addDays(todayKey, 13));
@@ -590,7 +591,7 @@ export function StudyCalendar({
       const response = await fetch("/api/planner/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startDate: planStart, endDate: planEnd }),
+        body: JSON.stringify({ startDate: planStart, endDate: planEnd, notes: planNotes.trim() || undefined }),
       });
       const result = await response.json().catch(() => null) as {
         error?: string;
@@ -1085,9 +1086,37 @@ export function StudyCalendar({
     {planOpen && <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-[#17132d]/55 p-3 backdrop-blur-sm sm:p-5"><section role="dialog" aria-modal="true" aria-labelledby="personal-plan-title" className="my-auto flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-[22px] bg-white shadow-2xl">
       <header className="flex items-start justify-between border-b border-[#eeeaf2] p-4 sm:p-5"><div><p className="text-[9px] font-black uppercase tracking-wide text-[#7259e8]">AI PERSONAL CALENDAR</p><h2 id="personal-plan-title" className="mt-1 text-base font-extrabold">Generate a reviewable study plan</h2><p className="mt-1 text-[9px] leading-4 text-[#8a8494]">The AI uses your saved schedule and preferences. Nothing is saved until you select and add the draft.</p></div><button type="button" onClick={() => setPlanOpen(false)} aria-label="Close personal plan" className="grid size-8 place-items-center rounded-lg border border-[#e9e5ef]"><X className="size-4" /></button></header>
       <div className="space-y-3 overflow-y-auto p-4 sm:p-5">
-        <form onSubmit={generatePersonalPlan} className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"><label className="text-[9px] font-bold">FROM<input required type="date" value={planStart} onChange={(event) => setPlanStart(event.target.value)} className="mt-1.5 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[10px]" /></label><label className="text-[9px] font-bold">THROUGH<input required type="date" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} className="mt-1.5 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[10px]" /></label><button disabled={planBusy || preferencesBusy} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#7259e8] px-3 text-[9px] font-extrabold text-white disabled:opacity-60">{planBusy ? <LoaderCircle className="size-3 animate-spin" /> : <Sparkles className="size-3.5" />}{planBusy ? "Generating…" : "Generate draft"}</button></form>
+        <form onSubmit={generatePersonalPlan} className="space-y-3">
+          <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <label className="text-[9px] font-bold">FROM
+              <input required type="date" value={planStart} onChange={(event) => setPlanStart(event.target.value)} className="mt-1.5 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[10px]" />
+            </label>
+            <label className="text-[9px] font-bold">THROUGH
+              <input required type="date" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} className="mt-1.5 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[10px]" />
+            </label>
+            <button disabled={planBusy || preferencesBusy} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#7259e8] px-3 text-[9px] font-extrabold text-white disabled:opacity-60">
+              {planBusy ? <LoaderCircle className="size-3 animate-spin" /> : <Sparkles className="size-3.5" />}
+              {planBusy ? "Generating…" : "Generate draft"}
+            </button>
+          </div>
+          <label className="block text-[9px] font-bold text-[#5d5768]">
+            Extra instructions for this plan
+            <span className="ml-1 font-medium text-[#9a94a3]">(optional)</span>
+            <textarea
+              value={planNotes}
+              onChange={(event) => setPlanNotes(event.target.value.slice(0, 1500))}
+              rows={3}
+              maxLength={1500}
+              placeholder="e.g. Leave Friday evenings free · denser review before the CE 275 quiz · prefer 7–9pm blocks · keep 30 min gaps between sessions · more Maths than labs this week"
+              className="mt-1.5 w-full rounded-xl border border-[#e8e4ed] px-3 py-2 text-[11px] leading-4 text-[#17132d] outline-none placeholder:text-[#b0a9b8] focus:border-[#aa9af0]"
+            />
+          </label>
+          <p className="text-[8px] leading-4 text-[#8a8494]">
+            The AI follows your saved preferences (days, times, session length, breaks, daily limit, pace) and these notes together.
+          </p>
+        </form>
         {planError && <p role="alert" className={`rounded-lg p-2.5 text-[9px] ${planError.includes("added") ? "bg-[#e9f7ef] text-[#287451]" : "bg-[#fff1ef] text-[#a44e48]"}`}>{planError}</p>}
-        {!planDraft.length && <p className="rounded-lg bg-[#f7f5ff] p-3 text-[9px] leading-4 text-[#726b80]">Preferences currently set to {preferences.pace} pace, {preferences.sessionMinutes}-minute sessions, {preferences.breakMinutes}-minute breaks, and {preferences.dailyLimitMinutes} minutes per day. Save changes to preferences before generating a draft.</p>}
+        {!planDraft.length && <p className="rounded-lg bg-[#f7f5ff] p-3 text-[9px] leading-4 text-[#726b80]">Using {preferences.pace} pace · {preferences.sessionMinutes}-min sessions · {preferences.breakMinutes}-min breaks · {preferences.dailyLimitMinutes} min/day · days {preferences.studyDays.map((d) => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]).join(", ")} · {preferences.preferredTimes.join(", ")}. Save preference changes first, then add any extra instructions above.</p>}
         {planDraft.length > 0 && <><p className="text-[9px] font-extrabold">Review and choose from {planDraft.length} suggested blocks. You can remove any suggestion before saving.</p>{renderDrafts(planDraft, setPlanDraft, "plan")}<div className="flex flex-wrap gap-2"><button type="button" onClick={savePersonalPlan} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#17132d] px-3.5 text-[9px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}Add selected blocks to calendar</button><button type="button" onClick={() => setPlanDraft([])} className="h-9 rounded-lg border border-[#e8e4ed] px-3 text-[9px] font-bold">Discard draft</button></div></>}
       </div>
     </section></div>}
