@@ -5,7 +5,18 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processUserReminders } from "@/lib/notifications/reminders";
 
-export type Stage6ActionResult = { error?: string; success?: string };
+export type Stage6ActionResult = {
+  error?: string;
+  success?: string;
+  course?: {
+    id: string;
+    title: string;
+    code: string;
+    color: string;
+    term: string | null;
+    archived: boolean;
+  };
+};
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -99,16 +110,30 @@ export async function saveCourse(formData: FormData): Promise<Stage6ActionResult
     if (error) return { error: courseWriteError(error, "update") };
     if (!data) return { error: "That course is no longer available in your account." };
   } else {
-    const { error } = await auth.supabase.from("courses").insert({
+    const { data, error } = await auth.supabase.from("courses").insert({
       ...changes,
       user_id: auth.user.id,
       archived: false,
-    });
+    }).select("id, title, code, color, term, archived").single();
     if (error) return { error: courseWriteError(error, "add") };
+    revalidatePath("/app");
+    return {
+      success: "Course added.",
+      course: data
+        ? {
+            id: data.id,
+            title: data.title,
+            code: data.code,
+            color: data.color || "#7259e8",
+            term: data.term,
+            archived: Boolean(data.archived),
+          }
+        : undefined,
+    };
   }
 
   revalidatePath("/app");
-  return { success: id ? "Course updated." : "Course added." };
+  return { success: "Course updated." };
 }
 
 export async function setCourseArchived(id: string, archived: boolean): Promise<Stage6ActionResult> {

@@ -332,17 +332,23 @@ export function Stage6Courses({
 }) {
   const router = useRouter();
   const [showArchived, setShowArchived] = useState(false);
-  const terms = useMemo(() => [...new Set(data.courses.map((course) => course.term).filter((term): term is string => Boolean(term)))].sort(), [data.courses]);
+  // Optimistic courses so add/edit stays visible even if refresh fails on mobile/PWA.
+  const [localCourses, setLocalCourses] = useState<Stage6Course[] | null>(null);
+  useEffect(() => {
+    setLocalCourses(null);
+  }, [data.courses]);
+  const courses = localCourses ?? data.courses;
+  const terms = useMemo(() => [...new Set(courses.map((course) => course.term).filter((term): term is string => Boolean(term)))].sort(), [courses]);
   const currentTerm = data.currentSemester && terms.includes(data.currentSemester) ? data.currentSemester : "all";
   const [selectedTerm, setSelectedTerm] = useState(currentTerm);
   const [editing, setEditing] = useState<Stage6Course | null | undefined>(undefined);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
-  const listedCourses = useMemo(() => data.courses
-    .filter((course) => course.archived === showArchived)
+  const listedCourses = useMemo(() => courses
+    .filter((course) => Boolean(course.archived) === showArchived)
     .filter((course) => selectedTerm === "all" || !course.term || course.term === selectedTerm)
-    .filter((course) => `${course.code} ${course.title} ${course.term ?? ""}`.toLowerCase().includes(search.toLowerCase())), [data.courses, search, selectedTerm, showArchived]);
-  const selectedCourse = data.courses.find((course) => course.id === selectedCourseId) ?? null;
+    .filter((course) => `${course.code} ${course.title} ${course.term ?? ""}`.toLowerCase().includes(search.toLowerCase())), [courses, search, selectedTerm, showArchived]);
+  const selectedCourse = courses.find((course) => course.id === selectedCourseId) ?? null;
   const courseLectures = selectedCourse ? data.lectures.filter((lecture) => lecture.courseId === selectedCourse.id) : [];
 
   function runAction(action: () => Promise<Stage6ActionResult>, successCallback?: () => void) {
@@ -359,7 +365,50 @@ export function Stage6Courses({
   function submitCourse(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    runAction(() => saveCourse(new FormData(form)), () => setEditing(undefined));
+    const formData = new FormData(form);
+    startTransition(async () => {
+      try {
+        const result = await saveCourse(formData);
+        setMessage(result.error ?? result.success ?? "Update completed.");
+        if (result.error) return;
+        if (result.course) {
+          setLocalCourses((previous) => {
+            const base = previous ?? data.courses;
+            if (base.some((item) => item.id === result.course!.id)) {
+              return base.map((item) => (item.id === result.course!.id ? { ...item, ...result.course! } : item));
+            }
+            return [{ ...result.course!, archived: false }, ...base];
+          });
+        } else {
+          // Edit path without course payload — merge from form
+          const editId = String(formData.get("id") || "");
+          if (editId) {
+            setLocalCourses((previous) => {
+              const base = previous ?? data.courses;
+              return base.map((item) =>
+                item.id === editId
+                  ? {
+                      ...item,
+                      code: String(formData.get("code") || item.code).toUpperCase(),
+                      title: String(formData.get("title") || item.title),
+                      term: String(formData.get("term") || "") || null,
+                      color: String(formData.get("color") || item.color),
+                    }
+                  : item,
+              );
+            });
+          }
+        }
+        setEditing(undefined);
+        try {
+          router.refresh();
+        } catch {
+          /* keep optimistic list if soft refresh fails */
+        }
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : "The course could not be saved. Try again.");
+      }
+    });
   }
 
   const selectedTab = selectedCourse ? <CourseDetail course={selectedCourse} lectures={courseLectures} lectureError={data.errors.lectures} timezone={data.timezone} onBack={() => onOpenCourse(null)} onCapture={onCapture} onOpenLecture={onOpenLecture} /> : null;
@@ -372,7 +421,7 @@ export function Stage6Courses({
       </div>
       {message && <p role="status" className={`mt-4 rounded-xl px-4 py-3 text-xs font-semibold ${message.includes("couldn’t") || message.includes("no longer") || message.includes("could not") ? "bg-[#fff1ef] text-[#a44e48]" : "bg-[#f1efff] text-[#5b47bd]"}`}>{message}</p>}
       <div className="mt-5">
-        {data.errors.courses ? <SectionError>Courses could not be loaded. Check that the Stage 4 migration is applied, then refresh.</SectionError> : listedCourses.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{listedCourses.map((course) => <article key={course.id} className="min-w-0 overflow-hidden rounded-[22px] border border-[#e9e5ef] bg-white p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-2xl text-sm font-black" style={{ color: course.color, backgroundColor: `${course.color}18` }}><BookOpen className="size-5" /></span><div className="flex items-center gap-1"><button type="button" aria-label={`Edit ${course.title}`} onClick={() => setEditing(course)} className="grid size-8 place-items-center rounded-lg text-[#85808d] hover:bg-[#f3f0ff] hover:text-[#7259e8]"><Pencil className="size-3.5" /></button><button type="button" aria-label={showArchived ? `Restore ${course.title}` : `Archive ${course.title}`} onClick={() => runAction(() => setCourseArchived(course.id, !showArchived))} className="grid size-8 place-items-center rounded-lg text-[#85808d] hover:bg-[#f3f0ff] hover:text-[#7259e8]"><Archive className="size-3.5" /></button><button type="button" aria-label={`Remove ${course.title}`} onClick={() => { if (window.confirm(`Remove ${course.code} from your course list? Its lectures will remain in your account.`)) runAction(() => removeCourse(course.id)); }} className="grid size-8 place-items-center rounded-lg text-[#85808d] hover:bg-[#fff1ef] hover:text-[#a44e48]"><Trash2 className="size-3.5" /></button></div></div><p className="mt-4 text-[10px] font-black uppercase tracking-[.1em] text-[#85808d]">{course.code}{course.term ? ` · ${course.term}` : ""}</p><h2 className="mt-1 truncate text-base font-extrabold">{course.title}</h2><button type="button" onClick={() => onOpenCourse(course.id)} className="mt-4 inline-flex items-center gap-1.5 text-[10px] font-extrabold text-[#7259e8]">Open course <ArrowRight className="size-3.5" /></button></article>)}</div> : search ? <EmptyState title={`No courses match “${search}”`} copy="Try a different code, title, or term." /> : showArchived ? <EmptyState title="No archived courses" copy="Courses you archive will be listed here, ready to restore later." /> : <EmptyState title="Your course list is empty" copy="Add your first course to organize lectures, tasks, and study work." action={<button type="button" onClick={() => setEditing(null)} className="inline-flex items-center gap-2 rounded-xl bg-[#7259e8] px-4 py-2.5 text-xs font-extrabold text-white"><Plus className="size-4" /> Add your first course</button>} />}
+        {data.errors.courses ? <SectionError>Courses could not be loaded. Check that the Stage 4 migration is applied, then refresh.</SectionError> : listedCourses.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{listedCourses.map((course) => <article key={course.id} className="min-w-0 overflow-hidden rounded-[22px] border border-[#e9e5ef] bg-white p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-2xl text-sm font-black" style={{ color: course.color || "#7259e8", backgroundColor: `${course.color || "#7259e8"}18` }}><BookOpen className="size-5" /></span><div className="flex items-center gap-1"><button type="button" aria-label={`Edit ${course.title}`} onClick={() => setEditing(course)} className="grid size-8 place-items-center rounded-lg text-[#85808d] hover:bg-[#f3f0ff] hover:text-[#7259e8]"><Pencil className="size-3.5" /></button><button type="button" aria-label={showArchived ? `Restore ${course.title}` : `Archive ${course.title}`} onClick={() => runAction(() => setCourseArchived(course.id, !showArchived))} className="grid size-8 place-items-center rounded-lg text-[#85808d] hover:bg-[#f3f0ff] hover:text-[#7259e8]"><Archive className="size-3.5" /></button><button type="button" aria-label={`Remove ${course.title}`} onClick={() => { if (window.confirm(`Remove ${course.code} from your course list? Its lectures will remain in your account.`)) runAction(() => removeCourse(course.id)); }} className="grid size-8 place-items-center rounded-lg text-[#85808d] hover:bg-[#fff1ef] hover:text-[#a44e48]"><Trash2 className="size-3.5" /></button></div></div><p className="mt-4 text-[10px] font-black uppercase tracking-[.1em] text-[#85808d]">{course.code}{course.term ? ` · ${course.term}` : ""}</p><h2 className="mt-1 truncate text-base font-extrabold">{course.title}</h2><button type="button" onClick={() => onOpenCourse(course.id)} className="mt-4 inline-flex items-center gap-1.5 text-[10px] font-extrabold text-[#7259e8]">Open course <ArrowRight className="size-3.5" /></button></article>)}</div> : search ? <EmptyState title={`No courses match “${search}”`} copy="Try a different code, title, or term." /> : showArchived ? <EmptyState title="No archived courses" copy="Courses you archive will be listed here, ready to restore later." /> : <EmptyState title="Your course list is empty" copy="Add your first course to organize lectures, tasks, and study work." action={<button type="button" onClick={() => setEditing(null)} className="inline-flex items-center gap-2 rounded-xl bg-[#7259e8] px-4 py-2.5 text-xs font-extrabold text-white"><Plus className="size-4" /> Add your first course</button>} />}
       </div>
     </>}
 
@@ -1341,7 +1390,7 @@ function CourseDetail({ course, lectures, lectureError, timezone, onBack, onCapt
   return <div>
     <button type="button" onClick={onBack} className="mb-4 text-xs font-extrabold text-[#7259e8]">← All courses</button>
     <div className="rounded-[24px] border border-[#e9e5ef] bg-white p-5 sm:p-7">
-      <div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-2xl" style={{ color: course.color, backgroundColor: `${course.color}18` }}><BookOpen className="size-6" /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.12em] text-[#85808d]">{course.code}{course.term ? ` · ${course.term}` : ""}</p><h1 className="mt-1 truncate text-2xl font-black tracking-[-.7px]">{course.title}</h1><p className="mt-1 text-xs text-[#85808d]">Your personal course workspace</p></div></div>
+      <div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-2xl" style={{ color: course.color || "#7259e8", backgroundColor: `${course.color || "#7259e8"}18` }}><BookOpen className="size-6" /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.12em] text-[#85808d]">{course.code}{course.term ? ` · ${course.term}` : ""}</p><h1 className="mt-1 truncate text-2xl font-black tracking-[-.7px]">{course.title}</h1><p className="mt-1 text-xs text-[#85808d]">Your personal course workspace</p></div></div>
       <div className="mt-6 flex gap-2 border-b border-[#eeeaf2]"><button type="button" onClick={() => setTab("overview")} className={`border-b-2 px-3 py-2 text-xs font-extrabold ${tab === "overview" ? "border-[#7259e8] text-[#7259e8]" : "border-transparent text-[#85808d]"}`}>Overview</button><button type="button" onClick={() => setTab("lectures")} className={`border-b-2 px-3 py-2 text-xs font-extrabold ${tab === "lectures" ? "border-[#7259e8] text-[#7259e8]" : "border-transparent text-[#85808d]"}`}>Lectures</button></div>
       {tab === "overview" ? <div className="grid gap-3 py-5 sm:grid-cols-2"><div className="rounded-2xl bg-[#f8f6ff] p-4"><p className="text-[9px] font-black uppercase tracking-[.12em] text-[#85808d]">Lectures</p><p className="mt-2 text-2xl font-black">{lectures.length}</p><p className="mt-1 text-[10px] text-[#85808d]">saved to this course</p></div><div className="sm:col-span-2"><button type="button" onClick={onCapture} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#7259e8] px-4 text-xs font-extrabold text-white"><Plus className="size-4" /> Add a lecture</button></div></div> : <div className="py-5">{lectureError ? <SectionError>Course lectures could not be loaded. Refresh to try again.</SectionError> : lectures.length ? <ul className="divide-y divide-[#f0edf4]">{lectures.map((lecture) => <li key={lecture.id}><button type="button" onClick={() => onOpenLecture(lecture)} className="flex w-full items-center gap-3 py-3 text-left first:pt-0 hover:bg-[#fbfaff]"><span className="grid size-9 place-items-center rounded-xl bg-[#f3f0ff] text-[#7259e8]"><FileText className="size-4" /></span><span className="min-w-0 flex-1"><span className="block min-w-0 truncate text-xs font-extrabold">{lecture.title}</span><span className="mt-1 block text-[10px] text-[#85808d]">{lecture.status} · {displayDate(lecture.createdAt, timezone)}</span></span><ArrowRight className="size-3.5 text-[#9993a0]" /></button></li>)}</ul> : <EmptyState title="No lectures in this course yet" copy="Add a lecture to build a course-specific study space." action={<button type="button" onClick={onCapture} className="text-xs font-extrabold text-[#7259e8]">Upload a lecture</button>} />}</div>}
     </div>

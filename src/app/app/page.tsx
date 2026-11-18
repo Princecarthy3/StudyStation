@@ -188,7 +188,7 @@ async function ProtectedWorkspace() {
       code: course.code,
       color: safeColor(course.color),
       term: course.term,
-      archived: course.archived,
+      archived: Boolean(course.archived),
     })),
     tasks: (tasksResult.data ?? []).map((task) => ({
       id: task.id,
