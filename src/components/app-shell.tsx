@@ -2735,6 +2735,7 @@ function FunctionalAssistantView({
 }) {
   const readyLectures = useMemo(() => lectures.filter((l) => l.status === "ready"), [lectures]);
   const [showFocusPicker, setShowFocusPicker] = useState(false);
+  const [showMobileHistory, setShowMobileHistory] = useState(false);
   const courseMap = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const selectedLabel = useMemo(() => {
     if (selectedLectureId === "all") return "All materials";
@@ -2757,7 +2758,67 @@ function FunctionalAssistantView({
         </span>
       </div>
 
-      <div className="grid min-h-[640px] overflow-hidden rounded-[28px] border border-[#e5e1e9] bg-white shadow-sm lg:grid-cols-[240px_1fr]">
+      {/* Mobile chat history — sidebar is desktop-only */}
+      <div className="lg:hidden space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMobileHistory((value) => !value)}
+            className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-[#e5e1e9] bg-white px-3 text-[12px] font-extrabold text-[#2c2638] shadow-sm"
+          >
+            Chat history
+            <span className="rounded-full bg-[#eeeaff] px-2 py-0.5 text-[10px] font-black text-[#5b47bd]">
+              {chatThreads.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-[#7259e8] px-3.5 text-[12px] font-extrabold text-white shadow-sm"
+          >
+            New chat
+          </button>
+        </div>
+        {showMobileHistory && (
+          <div className="max-h-48 space-y-1 overflow-y-auto rounded-2xl border border-[#e5e1e9] bg-white p-2 shadow-sm">
+            {chatThreads.length === 0 ? (
+              <p className="px-2 py-3 text-center text-[11px] leading-4 text-[#8a8494]">
+                Your past StudyStation chats on this phone will show up here after you send a message.
+              </p>
+            ) : (
+              chatThreads.map((thread) => (
+                <div
+                  key={thread.id}
+                  className={`flex items-center gap-1 rounded-xl px-2.5 py-2 ${
+                    thread.id === activeChatId ? "bg-[#eeeaff] text-[#5b47bd]" : "text-[#4a4458]"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenChat(thread.id);
+                      setShowMobileHistory(false);
+                    }}
+                    className="min-w-0 flex-1 truncate text-left text-[12px] font-semibold"
+                  >
+                    {thread.title}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteChat(thread.id)}
+                    className="shrink-0 rounded-lg px-2 py-1 text-[12px] font-bold text-[#a44e48]"
+                    aria-label="Delete chat"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="grid min-h-[min(640px,70vh)] overflow-hidden rounded-[28px] border border-[#e5e1e9] bg-white shadow-sm lg:grid-cols-[240px_1fr]">
         {/* Source Sidebar */}
         <aside className="hidden border-r border-[#ece8f0] bg-[#faf9fd] p-5 lg:block space-y-5">
           <div>
