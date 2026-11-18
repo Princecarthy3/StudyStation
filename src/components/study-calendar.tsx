@@ -37,6 +37,10 @@ type DraftCalendarEvent = {
   endsAtLocal: string;
   included: boolean;
   reason?: string;
+  /** When set, this row is a weekly pattern (0=Sun … 6=Sat) reviewed by time only. */
+  weekday?: number;
+  startTime?: string;
+  endTime?: string;
 };
 
 type ImportResponse = {
@@ -59,6 +63,110 @@ type ImportResponse = {
 };
 
 const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function parseLocalDateTimeParts(value: string): { ymd: string; hm: string } | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value.trim());
+  if (!match) return null;
+  return { ymd: match[1], hm: match[2] };
+}
+
+function weekdayFromYmd(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay();
+}
+
+/** Collapse expanded semester rows into unique weekly class patterns for review. */
+function collapseImportToWeeklyTemplates(
+  events: Array<{
+    title: string;
+    type: string;
+    location: string | null;
+    course: string | null;
+    startsAtLocal: string | null;
+    endsAtLocal: string | null;
+  }>,
+  courses: Stage6Course[],
+): DraftCalendarEvent[] {
+  const slots = new Map<string, DraftCalendarEvent>();
+  for (const item of events) {
+    if (!item.startsAtLocal || !item.endsAtLocal) continue;
+    const startParts = parseLocalDateTimeParts(item.startsAtLocal);
+    const endParts = parseLocalDateTimeParts(item.endsAtLocal);
+    if (!startParts || !endParts) continue;
+    const weekday = weekdayFromYmd(startParts.ymd);
+    const key = [
+      weekday,
+      startParts.hm,
+      endParts.hm,
+      item.title.trim().toLowerCase(),
+      item.type,
+      (item.location ?? "").trim().toLowerCase(),
+      (item.course ?? "").trim().toLowerCase(),
+    ].join("|");
+    if (slots.has(key)) continue;
+    slots.set(key, {
+      title: item.title,
+      type: item.type,
+      location: item.location,
+      course: item.course,
+      courseId: eventCourse(item.course, courses),
+      startsAtLocal: item.startsAtLocal,
+      endsAtLocal: item.endsAtLocal,
+      included: true,
+      weekday,
+      startTime: startParts.hm,
+      endTime: endParts.hm,
+    });
+  }
+  return [...slots.values()].sort((a, b) => {
+    const dayA = a.weekday === 0 ? 7 : (a.weekday ?? 8);
+    const dayB = b.weekday === 0 ? 7 : (b.weekday ?? 8);
+    if (dayA !== dayB) return dayA - dayB;
+    return (a.startTime ?? "").localeCompare(b.startTime ?? "");
+  });
+}
+
+function expandWeeklyTemplatesAcrossSemester(
+  templates: DraftCalendarEvent[],
+  semesterStart: string,
+  semesterEnd: string,
+  timezone: string,
+  maxEvents = 500,
+): PlannerEventInput[] {
+  const start = new Date(`${semesterStart}T12:00:00`);
+  const end = new Date(`${semesterEnd}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return [];
+
+  const items: PlannerEventInput[] = [];
+  for (let cursor = new Date(start.getTime()); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    // Use local calendar day from the date inputs (YYYY-MM-DD) via UTC noon walk
+    const y = cursor.getUTCFullYear();
+    const m = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(cursor.getUTCDate()).padStart(2, "0");
+    const ymd = `${y}-${m}-${d}`;
+    const weekday = cursor.getUTCDay();
+    for (const template of templates) {
+      if (!template.included) continue;
+      const want = template.weekday;
+      const startHm = template.startTime || parseLocalDateTimeParts(template.startsAtLocal)?.hm;
+      const endHm = template.endTime || parseLocalDateTimeParts(template.endsAtLocal)?.hm;
+      if (want === undefined || !startHm || !endHm) continue;
+      if (weekday !== want) continue;
+      items.push({
+        title: template.title,
+        type: template.type,
+        location: template.location,
+        courseId: template.courseId,
+        startsAtLocal: `${ymd}T${startHm}`,
+        endsAtLocal: `${ymd}T${endHm}`,
+        source: "manual_import",
+      });
+      if (items.length >= maxEvents) return items;
+    }
+  }
+  return items;
+}
+
 const weekdayValues = [1, 2, 3, 4, 5, 6, 0];
 const timeChoices = ["morning", "afternoon", "evening"];
 const eventColors: Record<string, string> = {
@@ -391,13 +499,24 @@ export function StudyCalendar({
           `Expanded ${result.templateCount} weekly classes into ${result.expandedCount} semester sessions (${result.semesterStart ?? semesterStart} → ${result.semesterEnd ?? semesterEnd}).`,
         );
       }
-      setImportDraft(result.events.map((item) => ({
-        ...item,
-        courseId: eventCourse(item.course, courses),
-        startsAtLocal: item.startsAtLocal ?? "",
-        endsAtLocal: item.endsAtLocal ?? "",
-        included: true,
-      })));
+      const templates = collapseImportToWeeklyTemplates(result.events, courses);
+      if (templates.length) {
+        setImportDraft(templates);
+        setImportNotice(
+          result.expandedCount && result.templateCount
+            ? `Found ${templates.length} weekly classes for ${result.semesterStart ?? semesterStart} → ${result.semesterEnd ?? semesterEnd}. Review day and times only; dates fill in across the semester when you import.`
+            : `Found ${templates.length} weekly classes. Review day and times; full semester dates are applied on import.`,
+        );
+      } else {
+        // Fallback: one-off dated events (no clean weekly pattern)
+        setImportDraft(result.events.map((item) => ({
+          ...item,
+          courseId: eventCourse(item.course, courses),
+          startsAtLocal: item.startsAtLocal ?? "",
+          endsAtLocal: item.endsAtLocal ?? "",
+          included: true,
+        })));
+      }
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "The calendar file could not be read.");
     } finally {
@@ -411,19 +530,33 @@ export function StudyCalendar({
       setImportError("Select at least one calendar item to import.");
       return;
     }
-    if (selected.some((item) => !item.startsAtLocal || !item.endsAtLocal)) {
-      setImportError("Add a start and end time for every selected row. The importer will not guess missing times.");
+    if (selected.some((item) => {
+      if (item.weekday !== undefined) {
+        return !(item.startTime || item.startsAtLocal) || !(item.endTime || item.endsAtLocal);
+      }
+      return !item.startsAtLocal || !item.endsAtLocal;
+    })) {
+      setImportError("Add a start and end time for every selected class. Day-of-week rows only need times.");
       return;
     }
-    const items: PlannerEventInput[] = selected.map((item) => ({
-      title: item.title,
-      type: item.type,
-      location: item.location,
-      courseId: item.courseId,
-      startsAtLocal: item.startsAtLocal,
-      endsAtLocal: item.endsAtLocal,
-      source: "manual_import",
-    }));
+    const weekly = selected.filter((item) => item.weekday !== undefined && (item.startTime || item.startsAtLocal));
+    const dated = selected.filter((item) => item.weekday === undefined);
+    const items: PlannerEventInput[] = [
+      ...expandWeeklyTemplatesAcrossSemester(weekly, semesterStart, semesterEnd, timezone, 500),
+      ...dated.map((item) => ({
+        title: item.title,
+        type: item.type,
+        location: item.location,
+        courseId: item.courseId,
+        startsAtLocal: item.startsAtLocal,
+        endsAtLocal: item.endsAtLocal,
+        source: "manual_import" as const,
+      })),
+    ];
+    if (!items.length) {
+      setImportError("Could not build semester sessions from the selected classes. Check days and times.");
+      return;
+    }
     startTransition(async () => {
       const result = await createPlannerEvents(items, timezone);
       if (result.error) setImportError(result.error);
@@ -531,7 +664,50 @@ export function StudyCalendar({
       <div className="flex items-start gap-2"><input type="checkbox" checked={item.included} onChange={(event) => updateDraft(setter, index, { included: event.target.checked })} aria-label={`Include ${item.title}`} className="mt-1 accent-[#7259e8]" />
         <div className="min-w-0 flex-1"><input aria-label="Calendar event title" value={item.title} onChange={(event) => updateDraft(setter, index, { title: event.target.value })} maxLength={160} className="h-8 w-full rounded-lg border border-[#e8e4ed] px-2 text-[10px] font-bold" />{item.reason && <p className="mt-1 text-[9px] leading-4 text-[#7c7489]">{item.reason}</p>}<p className="mt-1 text-[8px] capitalize text-[#928b9a]">{item.type}{item.course ? ` · ${item.course}` : ""}{item.location ? ` · ${item.location}` : ""}</p></div>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-[8px] font-bold text-[#756e80]">START<input type="datetime-local" value={item.startsAtLocal} onChange={(event) => updateDraft(setter, index, { startsAtLocal: event.target.value })} className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[9px]" /></label><label className="text-[8px] font-bold text-[#756e80]">END<input type="datetime-local" value={item.endsAtLocal} onChange={(event) => updateDraft(setter, index, { endsAtLocal: event.target.value })} className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[9px]" /></label></div>
+      {item.weekday !== undefined ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <label className="text-[8px] font-bold text-[#756e80]">DAY
+            <select
+              value={item.weekday}
+              onChange={(event) => updateDraft(setter, index, { weekday: Number(event.target.value) })}
+              className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] bg-white px-2 text-[9px] font-semibold"
+            >
+              <option value={1}>Monday</option>
+              <option value={2}>Tuesday</option>
+              <option value={3}>Wednesday</option>
+              <option value={4}>Thursday</option>
+              <option value={5}>Friday</option>
+              <option value={6}>Saturday</option>
+              <option value={0}>Sunday</option>
+            </select>
+          </label>
+          <label className="text-[8px] font-bold text-[#756e80]">START TIME
+            <input
+              type="time"
+              value={item.startTime ?? parseLocalDateTimeParts(item.startsAtLocal)?.hm ?? ""}
+              onChange={(event) => updateDraft(setter, index, { startTime: event.target.value })}
+              className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[9px]"
+            />
+          </label>
+          <label className="text-[8px] font-bold text-[#756e80]">END TIME
+            <input
+              type="time"
+              value={item.endTime ?? parseLocalDateTimeParts(item.endsAtLocal)?.hm ?? ""}
+              onChange={(event) => updateDraft(setter, index, { endTime: event.target.value })}
+              className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[9px]"
+            />
+          </label>
+        </div>
+      ) : (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="text-[8px] font-bold text-[#756e80]">START
+            <input type="datetime-local" value={item.startsAtLocal} onChange={(event) => updateDraft(setter, index, { startsAtLocal: event.target.value })} className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[9px]" />
+          </label>
+          <label className="text-[8px] font-bold text-[#756e80]">END
+            <input type="datetime-local" value={item.endsAtLocal} onChange={(event) => updateDraft(setter, index, { endsAtLocal: event.target.value })} className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] px-2 text-[9px]" />
+          </label>
+        </div>
+      )}
       {dialogType === "plan" && <label className="mt-2 block text-[8px] font-bold text-[#756e80]">COURSE<select value={item.courseId ?? ""} onChange={(event) => updateDraft(setter, index, { courseId: event.target.value || null, course: event.target.value ? courseLabels.get(event.target.value) ?? null : null })} className="mt-1 h-9 w-full rounded-lg border border-[#e8e4ed] bg-white px-2 text-[9px]"><option value="">No course</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.code} · {course.title}</option>)}</select></label>}
     </article>)}</div>;
   }
@@ -902,7 +1078,7 @@ export function StudyCalendar({
         </form>
         {importError && <p role="alert" className="rounded-lg bg-[#fff1ef] p-2.5 text-[9px] text-[#a44e48]">{importError}</p>}
         {importNotice && <p role="status" className="rounded-lg bg-[#e9f7ef] p-2.5 text-[9px] text-[#287451]">{importNotice}</p>}
-        {importDraft.length > 0 && <><div className="border-t border-[#eeeaf2] pt-3"><h3 className="text-[10px] font-extrabold">Review {importDraft.length} entries from {importSource}</h3><p className="mt-1 text-[8px] leading-4 text-[#8a8494]">{importDisclosure}</p><p className="mt-1 text-[8px] leading-4 text-[#8a8494]">Select the items to add. Correct every title and time; items without extracted times must be completed here.</p></div>{renderDrafts(importDraft, setImportDraft, "import")}<button type="button" onClick={saveImportedCalendar} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#17132d] px-3.5 text-[9px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}Import selected events</button></>}
+        {importDraft.length > 0 && <><div className="border-t border-[#eeeaf2] pt-3"><h3 className="text-[10px] font-extrabold">Review {importDraft.length} weekly classes from {importSource}</h3><p className="mt-1 text-[8px] leading-4 text-[#8a8494]">{importDisclosure}</p><p className="mt-1 text-[8px] leading-4 text-[#8a8494]">Select classes to keep. Edit day and times only — the semester dates you set above are applied on import.</p></div>{renderDrafts(importDraft, setImportDraft, "import")}<button type="button" onClick={saveImportedCalendar} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#17132d] px-3.5 text-[9px] font-extrabold text-white disabled:opacity-60">{pending && <LoaderCircle className="size-3 animate-spin" />}Import selected events</button></>}
       </div>
     </section></div>}
 
