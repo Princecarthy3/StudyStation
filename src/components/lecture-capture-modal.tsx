@@ -296,50 +296,77 @@ export function LectureCaptureModal({
               )}
             </div>
 
-            {/* PRE-TRANSCRIPTION AUDIO PLAYER: Listen before uploading! */}
-            {recorded && !recording && recordedAudioUrl && (
+            {/* Post-recording actions: CTA first so mobile users always see it */}
+            {recorded && !recording && (
               <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-[.12em] text-[#7259e8]">
-                    Review your recording
-                  </span>
-                  <span className="text-[11px] font-bold text-[#868093]">
-                    Listen before transcription
-                  </span>
+                <div className="rounded-2xl border border-[#ddd6f3] bg-[#f6f3ff] p-3.5">
+                  <p className="text-[11px] font-extrabold text-[#5b47bd]">
+                    Recording ready{seconds > 0 ? ` · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-4 text-[#6d6678]">
+                    Upload to generate notes, or listen first and re-record if needed.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => processRecording(title)}
+                      disabled={processing}
+                      className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[12px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 hover:bg-[#5f46dd] disabled:opacity-60 transition"
+                    >
+                      {processing ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-4" />
+                      )}
+                      {processing ? "Uploading…" : "Upload and transcribe"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDiscardRecording}
+                      disabled={processing}
+                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#e3dfea] bg-white px-4 text-[12px] font-extrabold text-[#736c7e] hover:bg-[#faf9fc] disabled:opacity-50 transition"
+                    >
+                      <RotateCcw className="size-3.5" />
+                      Record again
+                    </button>
+                  </div>
                 </div>
 
-                <AudioPlayer
-                  src={recordedAudioUrl}
-                  title={title || "Recorded lecture audio"}
-                  variant="card"
-                  durationHintSeconds={seconds}
-                />
+                {recordedAudioUrl && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-[.12em] text-[#7259e8]">
+                        Review your recording
+                      </span>
+                      <span className="text-[11px] font-bold text-[#868093]">
+                        Listen before transcription
+                      </span>
+                    </div>
+                    <AudioPlayer
+                      src={recordedAudioUrl}
+                      title={title || "Recorded lecture audio"}
+                      variant="card"
+                      durationHintSeconds={seconds}
+                    />
+                  </>
+                )}
 
-                <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleDiscardRecording}
-                    disabled={processing}
-                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-[#e3dfea] bg-white px-4 text-[10px] font-extrabold text-[#736c7e] hover:bg-[#faf9fc] disabled:opacity-50 transition"
-                  >
-                    <RotateCcw className="size-3.5" />
-                    Record again
-                  </button>
-
+                {/* Sticky-style second CTA if the player pushes content down */}
+                {recordedAudioUrl && (
                   <button
                     type="button"
                     onClick={() => processRecording(title)}
                     disabled={processing}
-                    className="flex h-10 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[10px] font-extrabold text-white shadow-md shadow-[#7259e8]/20 hover:bg-[#5f46dd] disabled:opacity-60 transition"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[12px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 hover:bg-[#5f46dd] disabled:opacity-60 transition sm:hidden"
                   >
                     {processing ? (
                       <LoaderCircle className="size-4 animate-spin" />
                     ) : (
                       <Sparkles className="size-4" />
                     )}
-                    Upload and transcribe
+                    {processing ? "Uploading…" : "Upload and transcribe"}
                   </button>
-                </div>
+                )}
               </div>
             )}
 
@@ -375,8 +402,7 @@ export function LectureCaptureModal({
             )}
 
             <p className="mt-3 text-center text-xs leading-5 text-[#8a8494]">
-              You can listen to your recording above at any time. When you tap &quot;Upload and transcribe&quot;,
-              your recording is processed by StudyStation AI to generate your complete lecture notes and study sets.
+              Tap <span className="font-bold text-[#5b47bd]">Upload and transcribe</span> to process this recording into notes and study sets.
             </p>
           </div>
         ) : (
