@@ -200,7 +200,8 @@ async function transcribeWithMultimodalAI(input: {
 }
 
 
-const PROVIDER_CHUNK_BYTES = 20 * 1024 * 1024;
+/** Groq Whisper file limit is 25 MB; stay just under to avoid failed split attempts. */
+const PROVIDER_CHUNK_BYTES = 24 * 1024 * 1024;
 
 async function splitLongMedia(bytes: Buffer, mimeType: string): Promise<Array<{ bytes: Buffer; mimeType: string }>> {
   const mime = mimeType.toLowerCase().split(";")[0].trim();
@@ -282,13 +283,16 @@ async function splitLongMedia(bytes: Buffer, mimeType: string): Promise<Array<{ 
     console.warn("Long-media segmentation unavailable:", error instanceof Error ? error.message : error);
   }
 
-  // Fallback: single pass if still under hard provider-ish ceiling, else fail clearly.
+  // Fallback when ffmpeg is unavailable (typical on serverless):
+  // try a single pass up to ~25 MB (Groq limit). Larger files still get one
+  // attempt so Gemini / OpenRouter can try; providers will reject if truly too big.
   if (bytes.length <= 25 * 1024 * 1024) {
     return [{ bytes, mimeType: mime }];
   }
-  throw new Error(
-    "This lecture is too long for a single transcription pass and automatic splitting is unavailable. Convert the file to WAV (or split it into parts under ~25 MB each) and upload again. WAV files can be split automatically without extra server tools.",
+  console.warn(
+    `Long media (${(bytes.length / (1024 * 1024)).toFixed(1)} MB) could not be split (ffmpeg unavailable). Attempting a single-pass transcription.`,
   );
+  return [{ bytes, mimeType: mime }];
 }
 
 export async function transcribeLectureMedia(input: {

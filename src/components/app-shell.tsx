@@ -210,6 +210,84 @@ function EmptySearch({ query }: { query: string }) {
   );
 }
 
+
+/** Cap live-recording bitrate so typical lectures stay under transcription size limits. */
+const LIVE_RECORDING_BITS_PER_SECOND = 48_000;
+
+/**
+ * If a recording blob is too large for a single Whisper pass (~24 MB), re-encode
+ * to mono 16 kHz WAV in the browser so server-side splitting is not required.
+ */
+async function compressLectureAudioIfNeeded(blob: Blob, maxBytes = 22 * 1024 * 1024): Promise<File> {
+  const nameBase = "live-recording";
+  if (blob.size <= maxBytes) {
+    const ext = blob.type.includes("mp4") || blob.type.includes("m4a") ? "m4a" : blob.type.includes("wav") ? "wav" : "webm";
+    return new File([blob], `${nameBase}.${ext}`, { type: blob.type || "audio/webm" });
+  }
+
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) throw new Error("AudioContext unavailable");
+    const arrayBuffer = await blob.arrayBuffer();
+    const decodeCtx = new AudioCtx();
+    const decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+    await decodeCtx.close().catch(() => undefined);
+
+    const targetRate = 16000;
+    const ratio = decoded.sampleRate / targetRate;
+    const newLen = Math.max(1, Math.floor(decoded.length / ratio));
+    const pcm = new Float32Array(newLen);
+    const channels = decoded.numberOfChannels;
+    for (let i = 0; i < newLen; i += 1) {
+      const srcIndex = Math.min(decoded.length - 1, Math.floor(i * ratio));
+      let sum = 0;
+      for (let c = 0; c < channels; c += 1) sum += decoded.getChannelData(c)[srcIndex] || 0;
+      pcm[i] = sum / channels;
+    }
+    const wav = encodePcmToWav(pcm, targetRate);
+    // 16 kHz mono 16-bit is ~2 MB per 10 minutes — well under provider limits.
+    return new File([wav], `${nameBase}.wav`, { type: "audio/wav" });
+  } catch (error) {
+    console.warn("Client audio compress failed, uploading original:", error);
+    const ext = blob.type.includes("wav") ? "wav" : "webm";
+    return new File([blob], `${nameBase}.${ext}`, { type: blob.type || "audio/webm" });
+  }
+}
+
+function encodePcmToWav(samples: Float32Array, sampleRate: number): Blob {
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = samples.length * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i += 1) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeStr(36, "data");
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i += 1) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+
 export function AppShell({
   profile,
   dashboardData,
@@ -600,7 +678,12 @@ export function AppShell({
       const preferredType = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/aac"].find((type) =>
         MediaRecorder.isTypeSupported(type)
       );
-      const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType } : undefined);
+      const recorder = new MediaRecorder(
+        stream,
+        preferredType
+          ? { mimeType: preferredType, audioBitsPerSecond: LIVE_RECORDING_BITS_PER_SECOND }
+          : { audioBitsPerSecond: LIVE_RECORDING_BITS_PER_SECOND },
+      );
 
       const journal = new RecordingJournal();
       recordingJournalRef.current = journal;
@@ -1007,7 +1090,15 @@ export function AppShell({
     const fallbackTitle = course
       ? `${course.code} lecture · ${stamp}`
       : `Lecture · ${stamp}`;
-    const file = new File([recordedBlob], `live-recording.${extension}`, { type: mimeType });
+    let file: File;
+    try {
+      if (recordedBlob.size > 18 * 1024 * 1024) {
+        showToast("Preparing a lighter audio file for transcription…", "info");
+      }
+      file = await compressLectureAudioIfNeeded(recordedBlob, 22 * 1024 * 1024);
+    } catch {
+      file = new File([recordedBlob], `live-recording.${extension}`, { type: mimeType });
+    }
     await submitLecture(
       file,
       title?.trim() || lectureTitle.trim() || fallbackTitle,
@@ -1023,7 +1114,21 @@ export function AppShell({
       showToast("Lecture files must be 150 MB or smaller.", "error");
       return;
     }
-    await submitLecture(file, title);
+    const isDoc = /\.(pdf|docx|doc|pptx|ppt|txt|md|rtf)$/i.test(file.name)
+      || file.type.includes("pdf")
+      || file.type.includes("document")
+      || file.type.includes("presentation")
+      || file.type.startsWith("text/");
+    let ready = file;
+    if (!isDoc && file.size > 22 * 1024 * 1024 && (file.type.startsWith("audio/") || file.type.startsWith("video/") || !file.type)) {
+      try {
+        showToast("Compressing audio for reliable transcription…", "info");
+        ready = await compressLectureAudioIfNeeded(file, 22 * 1024 * 1024);
+      } catch {
+        ready = file;
+      }
+    }
+    await submitLecture(ready, title);
   }
 
   async function askAssistant(question?: string, specificLectureId?: string) {
