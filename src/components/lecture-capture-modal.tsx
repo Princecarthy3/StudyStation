@@ -130,7 +130,7 @@ export function LectureCaptureModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="lecture-upload-title"
-        className="my-auto max-h-[94vh] w-full max-w-[620px] overflow-y-auto rounded-[28px] bg-white shadow-2xl"
+        className="my-auto flex max-h-[94vh] w-full max-w-[620px] flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-[#ece9f0] px-5 py-4 sm:px-6">
           <div>
@@ -152,6 +152,7 @@ export function LectureCaptureModal({
           </button>
         </div>
 
+        <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="px-5 pt-5 sm:px-6">
           <div className="grid grid-cols-2 rounded-xl bg-[#f3f1f7] p-1" aria-label="Choose lecture source">
             {(
@@ -296,42 +297,9 @@ export function LectureCaptureModal({
               )}
             </div>
 
-            {/* Post-recording actions: CTA first so mobile users always see it */}
+            {/* Post-recording: review player, then always-visible upload CTAs */}
             {recorded && !recording && (
               <div className="mt-4 space-y-3">
-                <div className="rounded-2xl border border-[#ddd6f3] bg-[#f6f3ff] p-3.5">
-                  <p className="text-[11px] font-extrabold text-[#5b47bd]">
-                    Recording ready{seconds > 0 ? ` · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : ""}
-                  </p>
-                  <p className="mt-1 text-[11px] leading-4 text-[#6d6678]">
-                    Upload to generate notes, or listen first and re-record if needed.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={() => processRecording(title)}
-                      disabled={processing}
-                      className="flex h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[12px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 hover:bg-[#5f46dd] disabled:opacity-60 transition"
-                    >
-                      {processing ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="size-4" />
-                      )}
-                      {processing ? "Uploading…" : "Upload and transcribe"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDiscardRecording}
-                      disabled={processing}
-                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#e3dfea] bg-white px-4 text-[12px] font-extrabold text-[#736c7e] hover:bg-[#faf9fc] disabled:opacity-50 transition"
-                    >
-                      <RotateCcw className="size-3.5" />
-                      Record again
-                    </button>
-                  </div>
-                </div>
-
                 {recordedAudioUrl && (
                   <>
                     <div className="flex items-center justify-between">
@@ -351,22 +319,43 @@ export function LectureCaptureModal({
                   </>
                 )}
 
-                {/* Sticky-style second CTA if the player pushes content down */}
-                {recordedAudioUrl && (
-                  <button
-                    type="button"
-                    onClick={() => processRecording(title)}
-                    disabled={processing}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[12px] font-extrabold text-white shadow-md shadow-[#7259e8]/25 hover:bg-[#5f46dd] disabled:opacity-60 transition sm:hidden"
-                  >
-                    {processing ? (
-                      <LoaderCircle className="size-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="size-4" />
-                    )}
-                    {processing ? "Uploading…" : "Upload and transcribe"}
-                  </button>
-                )}
+                <div className="rounded-2xl border-2 border-[#7259e8]/35 bg-[#f6f3ff] p-4 shadow-sm">
+                  <p className="text-[12px] font-extrabold text-[#5b47bd]">
+                    Ready to transcribe
+                    {seconds > 0
+                      ? ` · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+                      : recordedAudioUrl
+                        ? " · recording captured"
+                        : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-4 text-[#6d6678]">
+                    Upload this recording to generate notes, flashcards, and study sets. Or record again if needed.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => processRecording(title)}
+                      disabled={processing || !recorded}
+                      className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[14px] font-extrabold text-white shadow-lg shadow-[#7259e8]/30 hover:bg-[#5f46dd] disabled:opacity-60 transition"
+                    >
+                      {processing ? (
+                        <LoaderCircle className="size-5 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-5" />
+                      )}
+                      {processing ? "Uploading…" : "Upload and transcribe"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDiscardRecording}
+                      disabled={processing}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#e3dfea] bg-white px-4 text-[12px] font-extrabold text-[#736c7e] hover:bg-[#faf9fc] disabled:opacity-50 transition"
+                    >
+                      <RotateCcw className="size-3.5" />
+                      Record again
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -573,6 +562,34 @@ export function LectureCaptureModal({
             <p className="mt-3 text-center text-xs leading-5 text-[#8a8494]">
               Only upload media you have permission to process. Files are stored privately and processed with StudyStation AI.
             </p>
+          </div>
+        )}
+        </div>
+
+        {recorded && !recording && tab === "record" && (
+          <div className="shrink-0 border-t border-[#ece9f0] bg-white p-3 sm:p-4">
+            <button
+              type="button"
+              onClick={() => processRecording(title)}
+              disabled={processing || !recorded}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-5 text-[15px] font-extrabold text-white shadow-lg shadow-[#7259e8]/30 hover:bg-[#5f46dd] disabled:opacity-60 transition"
+            >
+              {processing ? (
+                <LoaderCircle className="size-5 animate-spin" />
+              ) : (
+                <Sparkles className="size-5" />
+              )}
+              {processing ? "Uploading…" : "Upload and transcribe"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardRecording}
+              disabled={processing}
+              className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl text-[12px] font-extrabold text-[#736c7e] hover:bg-[#f7f5fa] disabled:opacity-50 transition"
+            >
+              <RotateCcw className="size-3.5" />
+              Record again
+            </button>
           </div>
         )}
       </section>
