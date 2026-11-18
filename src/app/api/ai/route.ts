@@ -11,6 +11,8 @@ type AskBody = {
   context?: unknown;
   link?: string;
   course?: string;
+  history?: Array<{ role?: string; content?: string }>;
+  threadId?: string;
 };
 
 const demoAnswer =
@@ -101,7 +103,36 @@ export async function POST(request: Request) {
       "- Format section titles plainly on their own lines (e.g. Direct Answer, Connection to your course, Additional explanation).\n" +
       "- For lists, use simple hyphens ('- ') or numbered items ('1. '), never asterisks.";
 
-    const tutorUserPrompt = `LECTURE CONTEXT:\n${JSON.stringify(body.context ?? {})}\n\nSTUDENT QUESTION:\n${question}`;
+    const history = Array.isArray(body.history) ? body.history : [];
+    const priorTurns = history
+      .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
+      .map((item) => ({
+        role: item.role as "user" | "assistant",
+        content: String(item.content).trim().slice(0, 4000),
+      }))
+      .filter((item) => item.content.length > 0)
+      .slice(-16);
+
+    const contextBlock = `LECTURE CONTEXT:\n${JSON.stringify(body.context ?? {})}`;
+    const tutorMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      {
+        role: "system",
+        content:
+          tutorSystemPrompt +
+          "\n\nRemember details the student shared earlier in this same conversation and stay consistent with them. Refer back to prior answers when helpful.",
+      },
+      {
+        role: "user",
+        content: contextBlock + "\n\nUse this lecture context together with the ongoing conversation that follows.",
+      },
+    ];
+    for (const turn of priorTurns) {
+      tutorMessages.push({ role: turn.role, content: turn.content });
+    }
+    const last = tutorMessages[tutorMessages.length - 1];
+    if (!(last?.role === "user" && last.content === question)) {
+      tutorMessages.push({ role: "user", content: question });
+    }
 
     const sanitizeAnswer = (raw: string) =>
       raw
@@ -113,45 +144,38 @@ export async function POST(request: Request) {
         .replace(/```$/gm, "")
         .trim();
 
-    // 1. Prefer Gemini for StudyStation AI Tutor
+    // 1. Prefer Gemini for StudyStation AI Tutor (multi-turn memory)
     if (hasGeminiKey()) {
       try {
-        const answer = await geminiChat(
-          [
-            { role: "system", content: tutorSystemPrompt },
-            { role: "user", content: tutorUserPrompt },
-          ],
-          { maxOutputTokens: 3000, temperature: 0.25 }
-        );
-        return NextResponse.json({ answer: sanitizeAnswer(answer), provider: "gemini" });
+        const answer = await geminiChat(tutorMessages, { maxOutputTokens: 3000, temperature: 0.25 });
+        return NextResponse.json({
+          answer: sanitizeAnswer(answer),
+          provider: "gemini",
+          threadId: typeof body.threadId === "string" ? body.threadId : null,
+        });
       } catch (geminiErr) {
         console.warn("Gemini study tutor request failed, attempting fallback:", geminiErr);
         if (!hasOpenRouterKey()) throw geminiErr;
       }
     }
 
-    // 2. OpenRouter fallback with constrained maxTokens to avoid credit rejection
+    // 2. OpenRouter fallback
     if (hasOpenRouterKey()) {
       try {
-        const answer = await openRouterChat(
-          [
-            { role: "system", content: tutorSystemPrompt },
-            { role: "user", content: tutorUserPrompt },
-          ],
-          { maxTokens: 900, temperature: 0.25 }
-        );
-        return NextResponse.json({ answer: sanitizeAnswer(answer), provider: "openrouter" });
+        const answer = await openRouterChat(tutorMessages, { maxTokens: 900, temperature: 0.25 });
+        return NextResponse.json({
+          answer: sanitizeAnswer(answer),
+          provider: "openrouter",
+          threadId: typeof body.threadId === "string" ? body.threadId : null,
+        });
       } catch (openRouterErr) {
-        // If OpenRouter failed due to token limits and Gemini is configured, retry Gemini
         if (hasGeminiKey()) {
-          const answer = await geminiChat(
-            [
-              { role: "system", content: tutorSystemPrompt },
-              { role: "user", content: tutorUserPrompt },
-            ],
-            { maxOutputTokens: 3000, temperature: 0.25 }
-          );
-          return NextResponse.json({ answer: sanitizeAnswer(answer), provider: "gemini" });
+          const answer = await geminiChat(tutorMessages, { maxOutputTokens: 3000, temperature: 0.25 });
+          return NextResponse.json({
+            answer: sanitizeAnswer(answer),
+            provider: "gemini",
+            threadId: typeof body.threadId === "string" ? body.threadId : null,
+          });
         }
         throw openRouterErr;
       }

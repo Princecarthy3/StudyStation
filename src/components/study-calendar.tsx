@@ -168,6 +168,8 @@ export function StudyCalendar({
   const [imageConsent, setImageConsent] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [importDraft, setImportDraft] = useState<DraftCalendarEvent[]>([]);
+  const [semesterStart, setSemesterStart] = useState(todayKey);
+  const [semesterEnd, setSemesterEnd] = useState(() => addDays(todayKey, 16 * 7));
   const [planOpen, setPlanOpen] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState("");

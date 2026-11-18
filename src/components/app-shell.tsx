@@ -121,6 +121,42 @@ type AppNotification = { id: string; type: string; title: string; body: string; 
 type Modal = "capture" | "flashcards" | "note" | null;
 type SourceTab = "record" | "upload";
 type ChatMessage = { role: "user" | "assistant"; content: string; citation?: string };
+type StoredChatThread = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+};
+
+const AI_CHATS_KEY = "studystation_ai_chat_threads_v1";
+
+function loadStoredChatThreads(): StoredChatThread[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(AI_CHATS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as StoredChatThread[];
+    return Array.isArray(parsed) ? parsed.slice(0, 40) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredChatThreads(threads: StoredChatThread[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(AI_CHATS_KEY, JSON.stringify(threads.slice(0, 40)));
+  } catch {
+    /* quota */
+  }
+}
+
+function welcomeChatMessage(name: string): ChatMessage {
+  return {
+    role: "assistant",
+    content: `Hi ${name} — I'm StudyStation, your personal AI university tutor grounded in your courses and lecture materials. What concept, lecture, or problem can I help you understand today?`,
+  };
+}
 
 type SpeechRecognitionResult = { isFinal: boolean; 0: { transcript: string } };
 type SpeechRecognitionEvent = { resultIndex: number; results: ArrayLike<SpeechRecognitionResult> };
@@ -237,12 +273,36 @@ export function AppShell({
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [selectedChatLectureId, setSelectedChatLectureId] = useState<string>("all");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: `Hi ${firstName} — I’m StudyStation, your personal AI university tutor grounded in your courses and lecture materials. What concept, lecture, or problem can I help you understand today?`,
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeChatMessage(firstName)]);
+  const [chatThreads, setChatThreads] = useState<StoredChatThread[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string>(() => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `chat-${Date.now()}`;
+  });
+
+  useEffect(() => {
+    setChatThreads(loadStoredChatThreads());
+  }, []);
+
+  useEffect(() => {
+    // Persist the active conversation whenever messages change (skip pure welcome).
+    if (messages.length <= 1) return;
+    const titleFromUser = messages.find((m) => m.role === "user")?.content?.slice(0, 60) || "Study chat";
+    setChatThreads((previous) => {
+      const others = previous.filter((thread) => thread.id !== activeChatId);
+      const next: StoredChatThread[] = [
+        {
+          id: activeChatId,
+          title: titleFromUser,
+          updatedAt: new Date().toISOString(),
+          messages,
+        },
+        ...others,
+      ].slice(0, 40);
+      saveStoredChatThreads(next);
+      return next;
+    });
+  }, [messages, activeChatId]);
 
   const [courseValue, setCourseValue] = useState("");
   const [lectureTitle, setLectureTitle] = useState("");
@@ -997,10 +1057,21 @@ export function AppShell({
         };
 
     try {
+      const prior = messages
+        .filter((m) => m.content !== prompt || m.role !== "user")
+        .slice(-16)
+        .map((m) => ({ role: m.role, content: m.content }));
+
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ask", question: prompt, context: contextPayload }),
+        body: JSON.stringify({
+          action: "ask",
+          question: prompt,
+          context: contextPayload,
+          history: prior,
+          threadId: activeChatId,
+        }),
       });
       const data = (await response.json()) as { answer?: string; error?: string };
       if (!response.ok) throw new Error(data.error || "No answer returned");
@@ -1415,6 +1486,31 @@ export function AppShell({
               setInput={setChatInput}
               loading={chatLoading}
               ask={askAssistant}
+              chatThreads={chatThreads}
+              activeChatId={activeChatId}
+              onNewChat={() => {
+                const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}`;
+                setActiveChatId(id);
+                setMessages([welcomeChatMessage(firstName)]);
+              }}
+              onOpenChat={(threadId) => {
+                const thread = chatThreads.find((item) => item.id === threadId);
+                if (!thread) return;
+                setActiveChatId(thread.id);
+                setMessages(thread.messages.length ? thread.messages : [welcomeChatMessage(firstName)]);
+              }}
+              onDeleteChat={(threadId) => {
+                setChatThreads((previous) => {
+                  const next = previous.filter((item) => item.id !== threadId);
+                  saveStoredChatThreads(next);
+                  return next;
+                });
+                if (threadId === activeChatId) {
+                  const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}`;
+                  setActiveChatId(id);
+                  setMessages([welcomeChatMessage(firstName)]);
+                }
+              }}
             />
           )}
         </main>
@@ -2615,6 +2711,11 @@ function FunctionalAssistantView({
   setInput,
   loading,
   ask,
+  chatThreads,
+  activeChatId,
+  onNewChat,
+  onOpenChat,
+  onDeleteChat,
 }: {
   studentName: string;
   lectures: Stage6Lecture[];
@@ -2626,6 +2727,11 @@ function FunctionalAssistantView({
   setInput: (value: string) => void;
   loading: boolean;
   ask: (question?: string) => void;
+  chatThreads: StoredChatThread[];
+  activeChatId: string;
+  onNewChat: () => void;
+  onOpenChat: (threadId: string) => void;
+  onDeleteChat: (threadId: string) => void;
 }) {
   const readyLectures = useMemo(() => lectures.filter((l) => l.status === "ready"), [lectures]);
   const [showFocusPicker, setShowFocusPicker] = useState(false);
@@ -2644,7 +2750,7 @@ function FunctionalAssistantView({
         <TitleBlock
           eyebrow="GROUNDED IN YOUR REAL COURSEWORK"
           title="Ask StudyStation"
-          copy="Get clear, cited answers and explanations based strictly on the lectures and materials you have captured."
+          copy="Chat history is saved on this device. StudyStation remembers the conversation you are in so you can follow up naturally."
         />
         <span className="hidden items-center gap-1.5 rounded-full bg-[#def7ec] px-3.5 py-1.5 text-[10px] font-extrabold text-[#047857] sm:flex">
           <i className="size-2 rounded-full bg-[#10b981]" /> {courses.length} courses · {readyLectures.length} lectures connected
@@ -2654,6 +2760,50 @@ function FunctionalAssistantView({
       <div className="grid min-h-[640px] overflow-hidden rounded-[28px] border border-[#e5e1e9] bg-white shadow-sm lg:grid-cols-[240px_1fr]">
         {/* Source Sidebar */}
         <aside className="hidden border-r border-[#ece8f0] bg-[#faf9fd] p-5 lg:block space-y-5">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-[.15em] text-[#868093]">Chat history</p>
+              <button
+                type="button"
+                onClick={onNewChat}
+                className="rounded-lg bg-[#7259e8] px-2 py-1 text-[9px] font-extrabold text-white"
+              >
+                New chat
+              </button>
+            </div>
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
+              {chatThreads.length === 0 ? (
+                <p className="text-[10px] leading-4 text-[#8a8494]">Past conversations with StudyStation AI will appear here.</p>
+              ) : (
+                chatThreads.map((thread) => (
+                  <div
+                    key={thread.id}
+                    className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 text-left ${
+                      thread.id === activeChatId ? "bg-[#eeeaff] text-[#5b47bd]" : "hover:bg-[#f3f0fa] text-[#4a4458]"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenChat(thread.id)}
+                      className="min-w-0 flex-1 truncate text-[11px] font-semibold"
+                      title={thread.title}
+                    >
+                      {thread.title}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteChat(thread.id)}
+                      className="shrink-0 rounded px-1 text-[10px] font-bold text-[#a44e48] opacity-70 hover:opacity-100"
+                      aria-label="Delete chat"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           <div>
             <p className="text-[10px] font-black uppercase tracking-[.15em] text-[#868093]">Knowledge Focus</p>
             <select
