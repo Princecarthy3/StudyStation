@@ -32,6 +32,7 @@ type Generation = {
     lectureId?: string;
     lectureTitle?: string;
     difficulty?: string;
+    questionType?: string;
     sourceTruncated?: boolean;
   } | null;
   output: StudyLabOutput | null;
@@ -78,6 +79,7 @@ export function AiStudyLab() {
   const [selectedId, setSelectedId] = useState("");
   const [action, setAction] = useState<StudyLabAction>("summary");
   const [difficulty, setDifficulty] = useState("standard");
+  const [questionType, setQuestionType] = useState<"multiple_choice" | "true_false" | "fill_in" | "mixed">("multiple_choice");
   const [count, setCount] = useState(8);
   const [countInput, setCountInput] = useState("8");
   const [instructions, setInstructions] = useState("");
@@ -150,6 +152,12 @@ export function AiStudyLab() {
   async function generate() {
     setError("");
     setNotice("");
+
+    if ((action === "ask" || action === "explain" || action === "simplify") && question.trim().length < 2) {
+      setError(action === "ask" ? "Please enter your question first." : action === "explain" ? "Please enter the concept you want explained." : "Please enter the material to simplify.");
+      return;
+    }
+
     setGenerating(true);
     try {
       const maxCount = action === "quiz" ? 30 : 20;
@@ -163,6 +171,7 @@ export function AiStudyLab() {
           action,
           lectureId: selectedSource,
           difficulty,
+          questionType: action === "quiz" ? questionType : undefined,
           count: finalCount,
           instructions,
           question,
@@ -263,10 +272,24 @@ export function AiStudyLab() {
                 <textarea value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={2000} rows={3} placeholder={action === "ask" ? "What is the main difference between…?" : action === "explain" ? "For example: oxidative phosphorylation" : "Paste a difficult passage or name a concept"} className="mt-1.5 w-full resize-y rounded-xl border border-[#e7e3ec] p-3 text-xs leading-5 outline-none focus:border-[#aa9af0]" />
               </label>}
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className={`mt-4 grid gap-3 ${action === "quiz" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                 <label className="text-[10px] font-extrabold text-[#5d5768]">DIFFICULTY
                   <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"><option value="introductory">Introductory</option><option value="standard">Standard</option><option value="advanced">Advanced</option></select>
                 </label>
+                {action === "quiz" && (
+                  <label className="text-[10px] font-extrabold text-[#5d5768]">QUESTION FORMAT
+                    <select
+                      value={questionType}
+                      onChange={(event) => setQuestionType(event.target.value as "multiple_choice" | "true_false" | "fill_in" | "mixed")}
+                      className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] bg-white px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"
+                    >
+                      <option value="multiple_choice">Multiple Choice (Objs)</option>
+                      <option value="true_false">True / False</option>
+                      <option value="fill_in">Fill-in-the-blanks (Fill-ins)</option>
+                      <option value="mixed">Mixed (All Question Types)</option>
+                    </select>
+                  </label>
+                )}
                 {(action === "quiz" || action === "flashcards") && (
                   <label className="text-[10px] font-extrabold text-[#5d5768]">
                     {action === "quiz" ? "QUESTION COUNT" : "CARD COUNT"}
@@ -439,7 +462,150 @@ function OutputView({ generation, answers, setAnswers, showQuizResults, setShowQ
 
   if ("cards" in output) return <div className="mt-3 space-y-2">{output.cards.map((card, index) => <button key={`${index}-${card.front}`} type="button" onClick={() => setRevealedCards({ ...revealedCards, [index]: !revealedCards[index] })} className="flashcard-face w-full rounded-xl border border-[#ebe7f0] p-3 text-left hover:shadow-sm"><span className="flashcard-chip inline-block rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wide">{revealedCards[index] ? "BACK" : `CARD ${index + 1} · TAP TO REVEAL`}</span><span className="flashcard-text mt-1 block text-[10px] font-semibold leading-4">{revealedCards[index] ? card.back : card.front}</span></button>)}</div>;
 
-  if ("questions" in output) return <div className="mt-3 space-y-4">{output.questions.map((item, index) => <fieldset key={`${index}-${item.question}`} className="rounded-xl border border-[#ebe7f0] p-3"><legend className="px-1 text-[10px] font-extrabold">Q{index + 1}. {item.question}</legend><div className="mt-2 space-y-1.5">{item.choices.map((choice, choiceIndex) => <label key={`${choiceIndex}-${choice}`} className={`flex cursor-pointer items-start gap-2 rounded-lg p-2 text-[9px] leading-4 ${answers[index] === choiceIndex ? "bg-[#f3f0ff]" : "hover:bg-[#faf9fc]"}`}><input type="radio" name={`question-${index}`} checked={answers[index] === choiceIndex} onChange={() => {setAnswers({ ...answers, [index]: choiceIndex }); setShowQuizResults(false); setAttemptMessage(""); setAttemptError("");}} className="mt-0.5 accent-[#7259e8]" /><span>{choice}</span></label>)}</div>{showQuizResults && <p className={`mt-2 rounded-lg p-2 text-[9px] leading-4 ${answers[index] === item.correctIndex ? "bg-[#e9f7ef] text-[#287451]" : "bg-[#fff1ef] text-[#a44e48]"}`}><b>{answers[index] === item.correctIndex ? "Right answer." : `Wrong answer. Correct answer: ${item.choices[item.correctIndex]}.`}</b> {item.explanation}</p>}</fieldset>)}{attemptError && <p role="alert" className="rounded-lg bg-[#fff1ef] p-2.5 text-[9px] font-semibold text-[#a44e48]">{attemptError}</p>}{attemptMessage && <p role="status" className="rounded-lg bg-[#e9f7ef] p-2.5 text-[9px] font-semibold text-[#287451]">{attemptMessage}</p>}<button type="button" disabled={attemptSaving} onClick={() => void saveQuizAttempt(generation.id, output.questions.length, answers, setShowQuizResults, setAttemptSaving, setAttemptMessage, setAttemptError)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#17132d] py-2.5 text-[10px] font-extrabold text-white disabled:opacity-60">{attemptSaving ? <><LoaderCircle className="size-3.5 animate-spin" /> Saving score…</> : showQuizResults ? "Save another attempt" : "Check answers and save attempt"}</button></div>;
+  if ("questions" in output) {
+    const letters = ["A", "B", "C", "D", "E", "F"];
+    const totalAnswered = Object.keys(answers).length;
+    const percent = output.questions.length > 0 ? Math.round((quizScore / output.questions.length) * 100) : 0;
+
+    return (
+      <div className="mt-3 space-y-4">
+        {/* Progress & Score Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#f7f5ff] p-3 text-[11px]">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-[#17132d]">{output.questions.length} questions</span>
+            <span className="text-[#8e879a]">·</span>
+            <span className="text-[#655d73]">
+              {totalAnswered} of {output.questions.length} answered
+            </span>
+          </div>
+          {showQuizResults && (
+            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${percent >= 70 ? "bg-[#e9f7ef] text-[#287451]" : "bg-[#fff1ef] text-[#a44e48]"}`}>
+              Score: {quizScore} / {output.questions.length} ({percent}%)
+            </span>
+          )}
+        </div>
+
+        {/* Questions */}
+        {output.questions.map((item, index) => {
+          const isCorrect = answers[index] === item.correctIndex;
+          const qType = item.type || (item.choices.length === 2 && item.choices[0].toLowerCase() === "true" ? "true_false" : /__+/.test(item.question) ? "fill_in" : "multiple_choice");
+
+          return (
+            <fieldset
+              key={`${index}-${item.question.slice(0, 30)}`}
+              className={`rounded-2xl border p-4 transition ${
+                showQuizResults
+                  ? isCorrect
+                    ? "border-[#a7e8c7] bg-[#f9fdfa]"
+                    : "border-[#f7c2be] bg-[#fffbfb]"
+                  : answers[index] !== undefined
+                    ? "border-[#c8bef6] bg-white"
+                    : "border-[#ebe7f0] bg-white"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <legend className="px-1 text-[11px] font-black leading-5 text-[#17132d]">
+                  <span className="mr-1.5 inline-block text-[#7259e8]">Q{index + 1}.</span>
+                  {item.question}
+                </legend>
+                <span className="shrink-0">
+                  {qType === "true_false" ? (
+                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-emerald-700">True / False</span>
+                  ) : qType === "fill_in" ? (
+                    <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-700">Fill in blank</span>
+                  ) : (
+                    <span className="rounded-md border border-[#e2daf8] bg-[#f4f1ff] px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#7259e8]">Multiple Choice</span>
+                  )}
+                </span>
+              </div>
+
+              {/* Choices rendering */}
+              <div className={`mt-3 ${qType === "true_false" ? "grid grid-cols-2 gap-2" : "space-y-2"}`}>
+                {item.choices.map((choice, choiceIndex) => {
+                  const isSelected = answers[index] === choiceIndex;
+                  const isChoiceCorrect = choiceIndex === item.correctIndex;
+                  const letter = letters[choiceIndex] || String(choiceIndex + 1);
+
+                  let choiceClass = "border-[#ece8f2] bg-white hover:border-[#cfc6f4] hover:bg-[#faf9fe]";
+                  if (showQuizResults) {
+                    if (isChoiceCorrect) {
+                      choiceClass = "border-[#83dcaf] bg-[#eefaf3] text-[#1c6643] font-bold shadow-sm";
+                    } else if (isSelected && !isChoiceCorrect) {
+                      choiceClass = "border-[#f5b8b5] bg-[#fff2f1] text-[#9c3833] line-through";
+                    } else {
+                      choiceClass = "border-[#f0ecf5] bg-white opacity-60";
+                    }
+                  } else if (isSelected) {
+                    choiceClass = "border-[#8e78ea] bg-[#f4f1ff] text-[#17132d] font-bold shadow-sm";
+                  }
+
+                  return (
+                    <label
+                      key={`${choiceIndex}-${choice}`}
+                      className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-2.5 text-[10px] leading-4 transition ${choiceClass}`}
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${index}`}
+                        checked={isSelected}
+                        onChange={() => {
+                          setAnswers({ ...answers, [index]: choiceIndex });
+                          setShowQuizResults(false);
+                          setAttemptMessage("");
+                          setAttemptError("");
+                        }}
+                        className="mt-0.5 size-3.5 shrink-0 accent-[#7259e8]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        {qType !== "true_false" && <b className="mr-1 text-[#7259e8]">{letter}.</b>}
+                        {choice}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Explanation callout */}
+              {showQuizResults && (
+                <div className="mt-3 rounded-xl border border-[#e8e4f2] bg-[#fcfbfe] p-3 text-[10px] leading-relaxed">
+                  <div className="flex items-center gap-1.5 font-black">
+                    {isCorrect ? (
+                      <span className="flex items-center gap-1 text-[#287451]">
+                        <Check className="size-3.5" /> Correct!
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[#a44e48]">
+                        <X className="size-3.5" /> Correct answer: {item.choices[item.correctIndex]}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[#655e72]">{item.explanation}</p>
+                </div>
+              )}
+            </fieldset>
+          );
+        })}
+
+        {attemptError && <p role="alert" className="rounded-xl bg-[#fff1ef] p-3 text-[10px] font-semibold text-[#a44e48]">{attemptError}</p>}
+        {attemptMessage && <p role="status" className="rounded-xl bg-[#e9f7ef] p-3 text-[10px] font-semibold text-[#287451]">{attemptMessage}</p>}
+
+        <button
+          type="button"
+          disabled={attemptSaving}
+          onClick={() => void saveQuizAttempt(generation.id, output.questions.length, answers, setShowQuizResults, setAttemptSaving, setAttemptMessage, setAttemptError)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#17132d] py-3 text-xs font-black text-white shadow-sm transition hover:bg-[#28214d] disabled:opacity-60"
+        >
+          {attemptSaving ? (
+            <><LoaderCircle className="size-4 animate-spin" /> Saving score…</>
+          ) : showQuizResults ? (
+            "Save another attempt"
+          ) : (
+            `Check answers (${totalAnswered}/${output.questions.length}) & save attempt`
+          )}
+        </button>
+      </div>
+    );
+  }
 
   if ("sections" in output) return <div className="mt-3 space-y-3"><p className="whitespace-pre-wrap text-[10px] leading-5 text-[#5f596b]">{output.summary}</p>{output.sections.map((section, sIdx) => <div key={`${sIdx}-${section.heading}`}><h4 className="text-[10px] font-extrabold text-[#17132d]">{section.heading}</h4><p className="mt-1 whitespace-pre-wrap text-[9px] leading-4 text-[#777180]">{section.body}</p></div>)}{output.keyTerms.length > 0 && <div><h4 className="text-[10px] font-extrabold text-[#17132d]">Key terms</h4><ul className="mt-1 space-y-1">{output.keyTerms.map((term, tIdx) => <li key={`${tIdx}-${term.term}`} className="text-[9px] leading-4"><b className="text-[#17132d]">{term.term}:</b> <span className="text-[#777180]">{term.definition}</span></li>)}</ul></div>}<div className="rounded-xl bg-[#f7f5ff] p-3"><h4 className="text-[10px] font-extrabold text-[#17132d]">Revision checklist</h4><ul className="mt-2 space-y-1">{output.revisionChecklist.map((item, cIdx) => <li key={`${cIdx}-${item}`} className="flex gap-2 text-[9px] leading-4 text-[#655d74]"><span>•</span>{item}</li>)}</ul></div></div>;
 

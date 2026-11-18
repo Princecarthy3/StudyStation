@@ -18,6 +18,7 @@ type RequestBody = {
   lectureId?: unknown;
   instructions?: unknown;
   difficulty?: unknown;
+  questionType?: unknown;
   count?: unknown;
   question?: unknown;
 };
@@ -29,6 +30,7 @@ function badRequest(message: string, status = 400) {
 function createPrompt(action: StudyLabAction, sourceTitle: string, sourceText: string, request: {
   instructions: string;
   difficulty: string;
+  questionType?: string;
   count: number;
   question: string;
 }) {
@@ -37,7 +39,7 @@ function createPrompt(action: StudyLabAction, sourceTitle: string, sourceText: s
     explain: '{"title":"...","answer":"...","keyPoints":["..."]}',
     ask: '{"title":"...","answer":"...","keyPoints":["..."]}',
     flashcards: '{"cards":[{"front":"...","back":"..."}]}',
-    quiz: '{"title":"...","questions":[{"question":"...","choices":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}',
+    quiz: '{"title":"...","questions":[{"question":"...","type":"multiple_choice","choices":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}',
     simplify: '{"title":"...","answer":"...","keyPoints":["..."]}',
   };
   const taskInstructions: Record<StudyLabAction, string> = {
@@ -50,13 +52,47 @@ CRITICAL RULES FOR SUMMARY:
     explain: "Explain the requested concept thoroughly and clearly at the requested difficulty. Ground course-specific facts in the source, and use your subject knowledge to explain mechanisms and principles directly without describing the slides or document format.",
     ask: "Answer the student's question directly using your subject knowledge even when the source omits the answer. Do not refuse just because the source is incomplete. Then connect the answer to source facts and label any extra material as additional explanation. State uncertainty only when you genuinely do not know.",
     flashcards: `Create exactly ${request.count} useful active-recall flashcards grounded in the source. Focus on core definitions, mechanisms, and principles.`,
-    quiz: `Create exactly ${request.count} practice multiple-choice questions grounded in the source material.
-Difficulty level "${request.difficulty}":
-- introductory: foundational recall, definitions, basic facts; avoid multi-step reasoning.
-- standard: typical university exam style; mix recall and application.
-- advanced: deeper analysis, synthesis, edge cases, and harder distractors.
-Every question must have exactly 4 choices (plain strings) and one correct answer via correctIndex (0-3).
-Return the full set of ${request.count} questions in one JSON object. Do not stop early.`,
+    quiz: (() => {
+      const qType = request.questionType || "multiple_choice";
+      let formatGuide = "";
+      if (qType === "true_false") {
+        formatGuide = `QUESTION FORMAT: TRUE / FALSE ONLY.
+- Every question must be a clear conceptual statement to be evaluated.
+- Every question must have EXACTLY 2 choices: ["True", "False"].
+- "correctIndex" must be 0 (if statement is True) or 1 (if statement is False).
+- Always include "type": "true_false".`;
+      } else if (qType === "fill_in") {
+        formatGuide = `QUESTION FORMAT: FILL-IN-THE-BLANKS ONLY.
+- Every question must contain a clear blank indicated with "_____" (5 underscores) representing an essential key term, concept, or formula.
+- Provide exactly 4 choices (candidate terms or phrases), where exactly one correctly fills the blank and the other 3 are plausible academic distractors.
+- "correctIndex" must point to the choice that correctly completes the blank (0-3).
+- Always include "type": "fill_in".`;
+      } else if (qType === "mixed") {
+        formatGuide = `QUESTION FORMAT: BALANCED COMBINATION of:
+1. Multiple Choice ("type": "multiple_choice") with 4 choices (A, B, C, D).
+2. True / False ("type": "true_false") with exactly 2 choices: ["True", "False"] (correctIndex 0 or 1).
+3. Fill-in-the-blanks ("type": "fill_in") with a "_____" blank and 4 candidate choices.
+Distribute the ${request.count} questions across these formats.`;
+      } else {
+        formatGuide = `QUESTION FORMAT: MULTIPLE CHOICE (OBJECTIVES / OBJS) ONLY.
+- Every question must have exactly 4 choices (plain strings) and one correct answer via correctIndex (0-3).
+- Always include "type": "multiple_choice".`;
+      }
+
+      return `Create exactly ${request.count} practice questions grounded in the source material.
+DIFFICULTY LEVEL: "${request.difficulty}":
+- introductory: foundational recall, definitions, basic facts, clear direct clues; avoid convoluted reasoning.
+- standard: typical university exam style; mix of conceptual recall, scenario application, and analytical reasoning.
+- advanced: deeper synthesis, edge cases, subtle distinctions, challenging analytical scenarios, and sophisticated academic distractors.
+
+${formatGuide}
+
+RULES:
+- Return the full set of ${request.count} questions in one JSON object.
+- Ground every question and explanation in the lecture content.
+- Include a clear, informative explanation for why the correct answer is right and why the distractors are wrong.
+- Do not stop early or truncate the questions.`;
+    })(),
     simplify: "Rewrite the requested material in simpler language without changing its meaning. Use your subject knowledge to clarify terminology, but do not add unsupported course-specific claims.",
   };
 
@@ -145,6 +181,13 @@ export async function POST(request: Request) {
     if (["advanced", "hard", "expert", "challenging"].includes(d)) return "advanced";
     return "standard";
   })();
+  const rawQuestionType = typeof body.questionType === "string" ? body.questionType.trim().toLowerCase() : "multiple_choice";
+  const questionType: "multiple_choice" | "true_false" | "fill_in" | "mixed" = (() => {
+    if (["true_false", "true/false", "tf", "boolean"].includes(rawQuestionType)) return "true_false";
+    if (["fill_in", "fill-in", "fill-ins", "fill_in_the_blank", "blank"].includes(rawQuestionType)) return "fill_in";
+    if (["mixed", "all", "any", "combination"].includes(rawQuestionType)) return "mixed";
+    return "multiple_choice";
+  })();
   if (action === "quiz" && (count < 3 || count > 30)) {
     return badRequest("Choose between 3 and 30 quiz questions.");
   }
@@ -194,6 +237,7 @@ export async function POST(request: Request) {
     lectureTitle: lecture.title,
     courseId: lecture.course_id,
     difficulty,
+    questionType: action === "quiz" ? questionType : null,
     requestedCount: action === "quiz" || action === "flashcards" ? count : null,
     sourceTruncated: lecture.transcript.length > sourceLimit,
   };
@@ -221,13 +265,14 @@ export async function POST(request: Request) {
       createPrompt(action, lecture.title, sourceText, {
         instructions,
         difficulty,
+        questionType,
         count: Number.isInteger(count) ? count as number : 8,
         question,
       }),
     ].join("\n\n"), {
       model,
       temperature: 0.2,
-      maxOutputTokens: action === "quiz" ? Math.min(8192, 600 + Number(count) * 220) : action === "flashcards" ? Math.min(4096, 400 + Number(count) * 120) : 8192,
+      maxOutputTokens: 8192,
     });
     raw = generated.text;
     usedModel = generated.model;
@@ -260,14 +305,14 @@ export async function POST(request: Request) {
       const repairCount = Math.min(count, 12);
       const repaired = await geminiGenerateJson([
         "Return only valid JSON for a practice quiz. No markdown.",
-        `Create exactly ${repairCount} multiple-choice questions at ${difficulty} difficulty from this source.`,
-        'Schema: {"title":"...","questions":[{"question":"...","choices":["...","...","...","..."],"correctIndex":0,"explanation":"..."}]}',
+        `Create exactly ${repairCount} practice questions in format "${questionType}" at ${difficulty} difficulty from this source.`,
+        'Schema: {"title":"...","questions":[{"question":"...","type":"multiple_choice","choices":["...","..."],"correctIndex":0,"explanation":"..."}]}',
         `SOURCE TITLE: ${lecture.title}`,
-        `SOURCE MATERIAL:\n${sourceText.slice(0, 6000)}`,
+        `SOURCE MATERIAL:\n${sourceText.slice(0, 15000)}`,
       ].join("\n\n"), {
         model,
-        temperature: 0.3,
-        maxOutputTokens: Math.min(8192, 800 + repairCount * 220),
+        temperature: 0.2,
+        maxOutputTokens: 8192,
       });
       const repairedRaw = parseJsonObject<unknown>(repaired.text);
       const normalized = normalizeQuizOutput(repairedRaw, repairCount);

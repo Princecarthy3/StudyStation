@@ -45,7 +45,12 @@ export async function POST(request: Request, context: RouteContext) {
   }
   const output = generation.output as QuizOutput;
   if (!Array.isArray(body.answers) || body.answers.length !== output.questions.length
-    || body.answers.some((answer) => !Number.isInteger(answer) || (answer as number) < 0 || (answer as number) > 3)) {
+    || body.answers.some((answer, idx) => {
+      if (!Number.isInteger(answer)) return true;
+      const num = answer as number;
+      const maxChoiceIdx = (output.questions[idx]?.choices?.length ?? 4) - 1;
+      return num < 0 || num > Math.max(1, maxChoiceIdx);
+    })) {
     return fail("Answer every question before saving your attempt.");
   }
   const answers = body.answers as number[];

@@ -18,14 +18,19 @@ export type FlashcardsOutput = {
   cards: Array<{ front: string; back: string }>;
 };
 
+export type QuizQuestionType = "multiple_choice" | "true_false" | "fill_in";
+
+export type QuizQuestion = {
+  question: string;
+  choices: string[];
+  correctIndex: number;
+  explanation: string;
+  type?: QuizQuestionType;
+};
+
 export type QuizOutput = {
   title: string;
-  questions: Array<{
-    question: string;
-    choices: string[];
-    correctIndex: number;
-    explanation: string;
-  }>;
+  questions: QuizQuestion[];
 };
 
 export type StudyLabOutput = SummaryOutput | ExplanationOutput | FlashcardsOutput | QuizOutput;
@@ -74,7 +79,7 @@ export function validateStudyOutput(action: StudyLabAction, value: unknown): val
         && text((card as Record<string, unknown>).back, 1200));
   }
 
-  return text(output.title, 200)
+  return text(output.title, 300)
     && Array.isArray(output.questions)
     && output.questions.length >= 1
     && output.questions.length <= 30
@@ -83,70 +88,167 @@ export function validateStudyOutput(action: StudyLabAction, value: unknown): val
       const item = question as Record<string, unknown>;
       const choices = item.choices;
       const correctIndex = Number(item.correctIndex);
-      return text(item.question, 800)
+      return text(item.question, 1500)
         && Array.isArray(choices)
         && choices.length >= 2
-        && choices.length <= 6
-        && choices.every((c) => text(c, 400))
+        && choices.length <= 8
+        && choices.every((c) => text(c, 800))
         && Number.isFinite(correctIndex)
         && Number.isInteger(correctIndex)
         && correctIndex >= 0
         && correctIndex < (choices as unknown[]).length
-        && text(item.explanation, 1500);
+        && text(item.explanation, 2500);
     });
 }
 
 /** Normalize model quiz JSON into a stable shape the UI expects. */
 export function normalizeQuizOutput(value: unknown, requestedCount: number): QuizOutput | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const raw = value as Record<string, unknown>;
+  if (!value) return null;
+
+  let raw: Record<string, unknown>;
+  if (Array.isArray(value)) {
+    raw = { questions: value };
+  } else if (typeof value === "object") {
+    raw = value as Record<string, unknown>;
+  } else {
+    return null;
+  }
+
   const title = typeof raw.title === "string" && raw.title.trim()
-    ? raw.title.trim().slice(0, 200)
+    ? raw.title.trim().slice(0, 300)
     : "Practice quiz";
+
+  // Find candidate array of questions across common keys
   const list = Array.isArray(raw.questions) ? raw.questions
     : Array.isArray(raw.quiz) ? raw.quiz
       : Array.isArray(raw.items) ? raw.items
-        : [];
-  const questions: QuizOutput["questions"] = [];
+        : Array.isArray(raw.practiceQuiz) ? raw.practiceQuiz
+          : Array.isArray(raw.practice_questions) ? raw.practice_questions
+            : Array.isArray(raw.practiceQuestions) ? raw.practiceQuestions
+              : Array.isArray(raw.questions_list) ? raw.questions_list
+                : Array.isArray(raw.test) ? raw.test
+                  : Array.isArray(raw.exam) ? raw.exam
+                    : Array.isArray(raw.data) ? raw.data
+                      : (Object.values(raw).find((v) => Array.isArray(v) && v.length > 0 && typeof v[0] === "object" && Boolean(
+                          (v[0] as Record<string, unknown>).question
+                          || (v[0] as Record<string, unknown>).prompt
+                          || (v[0] as Record<string, unknown>).statement
+                          || (v[0] as Record<string, unknown>).text
+                        )) as unknown[] | undefined) ?? [];
+
+  const questions: QuizQuestion[] = [];
   for (const entry of list) {
     if (!entry || typeof entry !== "object") continue;
     const item = entry as Record<string, unknown>;
     const questionText = typeof item.question === "string" ? item.question.trim()
       : typeof item.prompt === "string" ? item.prompt.trim()
-        : typeof item.text === "string" ? item.text.trim()
-          : "";
+        : typeof item.statement === "string" ? item.statement.trim()
+          : typeof item.stem === "string" ? item.stem.trim()
+            : typeof item.questionText === "string" ? item.questionText.trim()
+              : typeof item.text === "string" ? item.text.trim()
+                : "";
     if (!questionText) continue;
+
+    // Detect question type
+    let type: QuizQuestionType = "multiple_choice";
+    const rawType = String(item.type || item.questionType || item.format || "").toLowerCase();
+    if (["true_false", "true/false", "tf", "boolean"].includes(rawType)) {
+      type = "true_false";
+    } else if (["fill_in", "fill-in", "fill_in_the_blank", "fill-ins", "blank"].includes(rawType)) {
+      type = "fill_in";
+    }
+
+    // Extract choices
     let choices: string[] = [];
     if (Array.isArray(item.choices)) {
       choices = item.choices.map((c) => String(c ?? "").trim()).filter(Boolean);
     } else if (Array.isArray(item.options)) {
       choices = item.options.map((c) => String(c ?? "").trim()).filter(Boolean);
+    } else if (Array.isArray(item.answers)) {
+      choices = item.answers.map((c) => String(c ?? "").trim()).filter(Boolean);
+    } else if (Array.isArray(item.alternatives)) {
+      choices = item.alternatives.map((c) => String(c ?? "").trim()).filter(Boolean);
     }
-    while (choices.length < 4) choices.push(`Option ${choices.length + 1}`);
-    choices = choices.slice(0, 4);
-    let correctIndex = Number(item.correctIndex);
-    if (!Number.isInteger(correctIndex)) {
-      if (typeof item.answer === "string") {
-        const idx = choices.findIndex((c) => c.toLowerCase() === String(item.answer).toLowerCase());
-        correctIndex = idx >= 0 ? idx : 0;
-      } else if (typeof item.correct === "number") {
-        correctIndex = Number(item.correct);
-      } else {
-        correctIndex = 0;
+
+    // Auto-detect True/False if choices are True and False
+    const hasTrueFalseChoices = choices.length === 2
+      && choices.some((c) => c.toLowerCase() === "true")
+      && choices.some((c) => c.toLowerCase() === "false");
+    if (hasTrueFalseChoices) {
+      type = "true_false";
+    }
+
+    // Auto-detect fill-in if contains blank underscores
+    if (type !== "true_false" && (/__+/.test(questionText) || /\[blank\]/i.test(questionText))) {
+      type = "fill_in";
+    }
+
+    if (type === "true_false") {
+      // Standardize True/False choices
+      choices = ["True", "False"];
+    } else {
+      // Multiple Choice / Fill-in
+      if (choices.length < 2) {
+        choices = ["Option A", "Option B", "Option C", "Option D"];
+      } else if (choices.length === 2 && !hasTrueFalseChoices) {
+        choices.push("Option C", "Option D");
+      } else if (choices.length === 3) {
+        choices.push("None of the above");
+      }
+      choices = choices.slice(0, 6);
+    }
+
+    // Calculate correctIndex
+    let correctIndex = -1;
+    const rawIdx = item.correctIndex ?? item.correct_index ?? item.answerIndex ?? item.correctAnswerIndex ?? item.correct;
+    if (typeof rawIdx === "number" && Number.isInteger(rawIdx) && rawIdx >= 0 && rawIdx < choices.length) {
+      correctIndex = rawIdx;
+    } else if (typeof rawIdx === "string" && /^[0-9]+$/.test(rawIdx.trim())) {
+      const parsedNum = Number(rawIdx.trim());
+      if (parsedNum >= 0 && parsedNum < choices.length) correctIndex = parsedNum;
+    }
+
+    if (correctIndex === -1) {
+      const ans = String(item.answer ?? item.correctAnswer ?? item.correct_answer ?? item.solution ?? "").trim();
+      if (ans) {
+        const letter = ans.toUpperCase();
+        if (letter === "A" && choices.length >= 1) correctIndex = 0;
+        else if (letter === "B" && choices.length >= 2) correctIndex = 1;
+        else if (letter === "C" && choices.length >= 3) correctIndex = 2;
+        else if (letter === "D" && choices.length >= 4) correctIndex = 3;
+        else {
+          const exactIdx = choices.findIndex((c) => c.toLowerCase() === ans.toLowerCase());
+          if (exactIdx >= 0) {
+            correctIndex = exactIdx;
+          } else {
+            const partialIdx = choices.findIndex((c) => c.toLowerCase().includes(ans.toLowerCase()) || ans.toLowerCase().includes(c.toLowerCase()));
+            if (partialIdx >= 0) correctIndex = partialIdx;
+          }
+        }
       }
     }
-    correctIndex = Math.max(0, Math.min(3, Math.trunc(correctIndex)));
-    const explanation = typeof item.explanation === "string" && item.explanation.trim()
-      ? item.explanation.trim().slice(0, 1500)
-      : "Review the lecture notes for this concept.";
+
+    if (correctIndex < 0 || correctIndex >= choices.length) {
+      correctIndex = 0;
+    }
+
+    // Explanation
+    const explanationRaw = item.explanation ?? item.reason ?? item.rationale ?? item.feedback ?? item.why;
+    const explanation = typeof explanationRaw === "string" && explanationRaw.trim()
+      ? explanationRaw.trim().slice(0, 2000)
+      : `The correct answer is "${choices[correctIndex]}". Review the lecture notes for further context.`;
+
     questions.push({
-      question: questionText.slice(0, 800),
-      choices: choices.map((c) => c.slice(0, 400)),
+      question: questionText.slice(0, 1200),
+      choices: choices.map((c) => c.slice(0, 600)),
       correctIndex,
       explanation,
+      type,
     });
+
     if (questions.length >= Math.min(30, Math.max(1, requestedCount || 30))) break;
   }
+
   if (!questions.length) return null;
   return { title, questions };
 }
