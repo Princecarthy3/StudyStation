@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   BookOpen,
   Check,
+  CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Layers3,
   LoaderCircle,
   Maximize2,
+  Play,
   RotateCcw,
   Save,
   Sparkles,
@@ -72,7 +78,11 @@ async function fetchStudyLabData() {
   return await response.json() as { lectures: LectureSource[]; generations: Generation[] };
 }
 
-export function AiStudyLab() {
+export function AiStudyLab({
+  onNavigate,
+}: {
+  onNavigate?: (view: "quizzes" | "flashcards" | "planner" | "notes") => void;
+} = {}) {
   const [sources, setSources] = useState<LectureSource[]>([]);
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [selectedSource, setSelectedSource] = useState("");
@@ -95,15 +105,22 @@ export function AiStudyLab() {
   const [showQuizResults, setShowQuizResults] = useState(false);
   const [revealedCards, setRevealedCards] = useState<Record<number, boolean>>({});
   const [quizFullscreen, setQuizFullscreen] = useState(false);
+  const [flashcardsFullscreen, setFlashcardsFullscreen] = useState(false);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [activeCardFlipped, setActiveCardFlipped] = useState(false);
+  const [activeCardsMastered, setActiveCardsMastered] = useState(0);
 
   useEffect(() => {
-    if (!quizFullscreen) return;
+    if (!quizFullscreen && !flashcardsFullscreen) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setQuizFullscreen(false);
+      if (event.key === "Escape") {
+        setQuizFullscreen(false);
+        setFlashcardsFullscreen(false);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [quizFullscreen]);
+  }, [quizFullscreen, flashcardsFullscreen]);
 
   const current = useMemo(() => generations.find((item) => item.id === selectedId) ?? null, [generations, selectedId]);
 
@@ -145,6 +162,10 @@ export function AiStudyLab() {
     setAnswers({});
     setShowQuizResults(false);
     setQuizFullscreen(false);
+    setFlashcardsFullscreen(false);
+    setActiveCardIndex(0);
+    setActiveCardFlipped(false);
+    setActiveCardsMastered(0);
     setRevealedCards({});
     setEditedOutput(generation?.output ? JSON.stringify(generation.output, null, 2) : "");
   }
@@ -181,9 +202,15 @@ export function AiStudyLab() {
       const data = await response.json() as { generation: Generation; sourceTruncated: boolean };
       setGenerations((previous) => [data.generation, ...previous.filter((item) => item.id !== data.generation.id)].slice(0, 30));
       selectGeneration(data.generation);
-      setNotice(data.sourceTruncated
-        ? "Generated and saved. The transcript was long, so only its first section was used."
-        : "Generated and saved to your study library.");
+      setNotice(
+        data.generation.input_metadata?.action === "quiz"
+          ? "Your practice quiz is ready! Click 'Start Practice Quiz' below to begin."
+          : data.generation.input_metadata?.action === "flashcards"
+            ? "Your flashcard deck is ready! Click 'Study Flashcards Now' below to begin."
+            : data.sourceTruncated
+              ? "Generated and saved. The transcript was long, so only its first section was used."
+              : "Generated and saved to your study library."
+      );
       setQuestion("");
       setInstructions("");
     } catch (generationError) {
@@ -345,21 +372,25 @@ export function AiStudyLab() {
           <div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-[.1em] text-[#8e8796]">{actionLabels[current.input_metadata?.action ?? "summary"]}</p><h3 className="mt-1 text-sm font-extrabold">{current.output && "title" in current.output ? current.output.title : current.input_metadata?.lectureTitle}</h3><p className="mt-1 text-[9px] text-[#9993a0]">Source: {current.input_metadata?.lectureTitle ?? "Lecture"}{current.input_metadata?.sourceTruncated ? " · source excerpt" : ""}</p></div><div className="flex shrink-0 gap-1"><button type="button" disabled={saving} onClick={() => {setEditedOutput(JSON.stringify(current.output, null, 2)); setEditing((value) => !value);}} className="rounded-lg border border-[#e9e5ef] px-2 py-1.5 text-[9px] font-extrabold text-[#5d5768] disabled:opacity-50">{editing ? "Cancel" : "Edit"}</button><button type="button" disabled={saving} onClick={() => void removeCurrent()} className="grid size-7 place-items-center rounded-lg text-[#aa625c] hover:bg-[#fff1ef] disabled:opacity-50" aria-label="Delete study material"><Trash2 className="size-3.5" /></button></div></div>
 
           {editing ? <div className="mt-3"><textarea value={editedOutput} onChange={(event) => setEditedOutput(event.target.value)} rows={14} aria-label="Edit generated study material JSON" className="w-full rounded-xl border border-[#e7e3ec] p-3 font-mono text-[10px] leading-4 outline-none focus:border-[#aa9af0]" /><button type="button" disabled={saving} onClick={() => void saveEdit()} className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#17132d] text-[10px] font-extrabold text-white disabled:opacity-60">{saving ? <LoaderCircle className="size-3.5 animate-spin" /> : <Save className="size-3.5" />} Save edits</button></div>
-            : (
-              <>
-                {current.output && "questions" in current.output && (
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setQuizFullscreen(true)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2eb] bg-white px-2.5 text-[10px] font-extrabold text-[#534e60] hover:bg-[#faf9fd]"
-                    >
-                      <Maximize2 className="size-3.5" /> Full screen
-                    </button>
-                  </div>
-                )}
-                <OutputView key={current.id} generation={current} answers={answers} setAnswers={setAnswers} showQuizResults={showQuizResults} setShowQuizResults={setShowQuizResults} revealedCards={revealedCards} setRevealedCards={setRevealedCards} quizScore={quizScore} />
-              </>
+            : current.output && "questions" in current.output ? (
+              <QuizReadyCard
+                generation={current}
+                onStartQuiz={() => setQuizFullscreen(true)}
+                onGoToQuizzes={onNavigate ? () => onNavigate("quizzes") : undefined}
+              />
+            ) : current.output && "cards" in current.output ? (
+              <FlashcardsReadyCard
+                generation={current}
+                onStartFlashcards={() => {
+                  setActiveCardIndex(0);
+                  setActiveCardFlipped(false);
+                  setActiveCardsMastered(0);
+                  setFlashcardsFullscreen(true);
+                }}
+                onGoToFlashcards={onNavigate ? () => onNavigate("flashcards") : undefined}
+              />
+            ) : (
+              <OutputView key={current.id} generation={current} answers={answers} setAnswers={setAnswers} showQuizResults={showQuizResults} setShowQuizResults={setShowQuizResults} revealedCards={revealedCards} setRevealedCards={setRevealedCards} quizScore={quizScore} />
             )}
         </div>}
       </section>
@@ -378,6 +409,18 @@ export function AiStudyLab() {
                 <span className="rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-extrabold text-[#7259e8]">
                   Score {quizScore}/{current.output.questions.length}
                 </span>
+              )}
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuizFullscreen(false);
+                    onNavigate("quizzes");
+                  }}
+                  className="hidden sm:inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#ded7f4] bg-white px-3 text-[10px] font-bold text-[#574f67] hover:bg-[#f6f4fd]"
+                >
+                  Quizzes Library <ArrowRight className="size-3" />
+                </button>
               )}
               <button
                 type="button"
@@ -406,8 +449,271 @@ export function AiStudyLab() {
           </div>
         </div>
       )}
+
+      {flashcardsFullscreen && current?.output && "cards" in current.output && (
+        <div className="fixed inset-0 z-[110] flex flex-col bg-white">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#ece8f4] bg-[#faf9fc] px-4 py-3 sm:px-6">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">Flashcard Deck</p>
+              <h2 className="truncate text-sm font-black text-[#17132d] sm:text-base">
+                {current.input_metadata?.lectureTitle ? `${current.input_metadata.lectureTitle} — Flashcards` : "Flashcard Deck"}
+              </h2>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-extrabold text-[#7259e8]">
+                Card {activeCardIndex + 1} of {current.output.cards.length}
+              </span>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFlashcardsFullscreen(false);
+                    onNavigate("flashcards");
+                  }}
+                  className="hidden sm:inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#ded7f4] bg-white px-3 text-[10px] font-bold text-[#574f67] hover:bg-[#f6f4fd]"
+                >
+                  Flashcards Library <ArrowRight className="size-3" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setFlashcardsFullscreen(false)}
+                className="grid size-9 place-items-center rounded-xl border border-[#e6e2eb] bg-white text-[#5f586d] hover:bg-[#f4f1fb]"
+                aria-label="Exit full screen flashcards"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-8 sm:px-8">
+            <div className="mx-auto max-w-xl space-y-6">
+              <div className="flex items-center justify-between text-xs text-[#8a8494]">
+                <span className="font-extrabold text-[#7259e8]">CARD {activeCardIndex + 1} OF {current.output.cards.length}</span>
+                <span className="font-semibold text-[#287451]">{activeCardsMastered} marked as known</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveCardFlipped((val) => !val)}
+                className="flashcard-face flex min-h-[260px] w-full flex-col items-center justify-center rounded-[28px] border-2 border-[#e5ddfa] bg-gradient-to-br from-white to-[#faf9fe] p-8 text-center shadow-md transition hover:border-[#a898eb] hover:shadow-lg"
+              >
+                <span className="flashcard-chip rounded-full px-3 py-1 text-[9px] font-black shadow-xs">
+                  {activeCardFlipped ? "ANSWER" : "QUESTION · TAP TO REVEAL"}
+                </span>
+                <p className="flashcard-text mt-6 text-lg font-black leading-relaxed text-[#17132d]">
+                  {activeCardFlipped ? current.output.cards[activeCardIndex].back : current.output.cards[activeCardIndex].front}
+                </p>
+              </button>
+
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!current.output || !("cards" in current.output)) return;
+                    const len = current.output.cards.length;
+                    setActiveCardIndex((i) => (i - 1 + len) % len);
+                    setActiveCardFlipped(false);
+                  }}
+                  className="flashcard-nav inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#e9e5ef] bg-white px-4 text-xs font-bold text-[#3d3650] hover:bg-[#faf9fe]"
+                >
+                  <ChevronLeft className="size-4" /> Previous
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!current.output || !("cards" in current.output)) return;
+                    setActiveCardsMastered((m) => m + 1);
+                    const len = current.output.cards.length;
+                    setActiveCardIndex((i) => (i + 1) % len);
+                    setActiveCardFlipped(false);
+                  }}
+                  className="flashcard-know inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#e9f7ef] px-4 text-xs font-extrabold text-[#287451] hover:bg-[#d8f2e3]"
+                >
+                  <CheckCircle2 className="size-4" /> Got it
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!current.output || !("cards" in current.output)) return;
+                    const len = current.output.cards.length;
+                    setActiveCardIndex((i) => (i + 1) % len);
+                    setActiveCardFlipped(false);
+                  }}
+                  className="flashcard-nav inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#e9e5ef] bg-white px-4 text-xs font-bold text-[#3d3650] hover:bg-[#faf9fe]"
+                >
+                  Next <ChevronRight className="size-4" />
+                </button>
+              </div>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveCardIndex(0);
+                    setActiveCardFlipped(false);
+                    setActiveCardsMastered(0);
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#868093] hover:text-[#17132d]"
+                >
+                  <RotateCcw className="size-3" /> Restart deck from beginning
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>;
+}
+
+function QuizReadyCard({
+  generation,
+  onStartQuiz,
+  onGoToQuizzes,
+}: {
+  generation: Generation;
+  onStartQuiz: () => void;
+  onGoToQuizzes?: () => void;
+}) {
+  const output = generation.output;
+  if (!output || !("questions" in output)) return null;
+
+  const count = output.questions.length;
+  const difficulty = generation.input_metadata?.difficulty || "standard";
+  const questionType = generation.input_metadata?.questionType || "multiple_choice";
+  const formatLabel =
+    questionType === "true_false"
+      ? "True / False"
+      : questionType === "fill_in"
+        ? "Fill-in-the-blanks"
+        : questionType === "mixed"
+          ? "Mixed Types"
+          : "Multiple Choice";
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-[#dcd4f5] bg-gradient-to-br from-[#faf8ff] via-[#f7f5ff] to-[#f0ebff] p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#a3e4c4] bg-[#e9f7ef] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#287451]">
+          <span className="size-1.5 animate-pulse rounded-full bg-[#287451]" />
+          Ready to Practice
+        </span>
+        <span className="rounded-md border border-[#ded5f8] bg-white px-2 py-0.5 text-[8px] font-bold text-[#7259e8]">
+          Practice Quiz
+        </span>
+      </div>
+
+      <h4 className="mt-3 text-sm font-black leading-snug text-[#17132d]">
+        {output.title || generation.input_metadata?.lectureTitle || "Practice Quiz"}
+      </h4>
+
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[9px] font-extrabold text-[#5a5268]">
+        <span className="rounded-lg border border-[#ece7f4] bg-white px-2.5 py-1 shadow-xs">
+          {count} {count === 1 ? "question" : "questions"}
+        </span>
+        <span className="rounded-lg border border-[#ece7f4] bg-white px-2.5 py-1 capitalize shadow-xs">
+          {difficulty}
+        </span>
+        <span className="rounded-lg border border-[#ece7f4] bg-white px-2.5 py-1 shadow-xs">
+          {formatLabel}
+        </span>
+      </div>
+
+      <p className="mt-3 text-[10px] leading-relaxed text-[#756f82]">
+        Your practice quiz has been generated and is ready. Answer each question to test your recall and save your score to your semester progress.
+      </p>
+
+      <div className="mt-4 space-y-2">
+        <button
+          type="button"
+          onClick={onStartQuiz}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#7259e8] text-xs font-black text-white shadow-sm transition hover:bg-[#8069ed]"
+        >
+          <Play className="size-3.5 fill-current" /> Start Practice Quiz
+        </button>
+
+        {onGoToQuizzes && (
+          <button
+            type="button"
+            onClick={onGoToQuizzes}
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-[#dcd5f0] bg-white text-[10px] font-extrabold text-[#5d566d] transition hover:bg-[#faf9fd]"
+          >
+            Go to Quizzes Library <ArrowRight className="size-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FlashcardsReadyCard({
+  generation,
+  onStartFlashcards,
+  onGoToFlashcards,
+}: {
+  generation: Generation;
+  onStartFlashcards: () => void;
+  onGoToFlashcards?: () => void;
+}) {
+  const output = generation.output;
+  if (!output || !("cards" in output)) return null;
+
+  const count = output.cards.length;
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-[#dcd4f5] bg-gradient-to-br from-[#faf8ff] via-[#f7f5ff] to-[#f0ebff] p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#a3e4c4] bg-[#e9f7ef] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#287451]">
+          <span className="size-1.5 animate-pulse rounded-full bg-[#287451]" />
+          Deck Ready
+        </span>
+        <span className="rounded-md border border-[#ded5f8] bg-white px-2 py-0.5 text-[8px] font-bold text-[#7259e8]">
+          Flashcard Deck
+        </span>
+      </div>
+
+      <h4 className="mt-3 text-sm font-black leading-snug text-[#17132d]">
+        {generation.input_metadata?.lectureTitle ? `${generation.input_metadata.lectureTitle} — Flashcards` : "Study Flashcards"}
+      </h4>
+
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[9px] font-extrabold text-[#5a5268]">
+        <span className="rounded-lg border border-[#ece7f4] bg-white px-2.5 py-1 shadow-xs">
+          {count} {count === 1 ? "card" : "cards"}
+        </span>
+        <span className="rounded-lg border border-[#ece7f4] bg-white px-2.5 py-1 shadow-xs">
+          Active Recall
+        </span>
+        <span className="rounded-lg border border-[#ece7f4] bg-white px-2.5 py-1 shadow-xs">
+          Spaced Retention
+        </span>
+      </div>
+
+      <p className="mt-3 text-[10px] leading-relaxed text-[#756f82]">
+        Your active-recall flashcard deck is generated and ready. Practice flipping the cards to lock in key terms and definitions.
+      </p>
+
+      <div className="mt-4 space-y-2">
+        <button
+          type="button"
+          onClick={onStartFlashcards}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#7259e8] text-xs font-black text-white shadow-sm transition hover:bg-[#8069ed]"
+        >
+          <Layers3 className="size-3.5" /> Study Flashcards Now
+        </button>
+
+        {onGoToFlashcards && (
+          <button
+            type="button"
+            onClick={onGoToFlashcards}
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-[#dcd5f0] bg-white text-[10px] font-extrabold text-[#5d566d] transition hover:bg-[#faf9fd]"
+          >
+            Go to Flashcards Library <ArrowRight className="size-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function OutputView({ generation, answers, setAnswers, showQuizResults, setShowQuizResults, revealedCards, setRevealedCards, quizScore }: {

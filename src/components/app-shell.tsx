@@ -1621,7 +1621,7 @@ export function AppShell({
             <StudyCalendar data={plannerData} courses={liveDashboard.courses} timezone={liveDashboard.timezone} />
           )}
 
-          {view === "study-lab" && <AiStudyLab />}
+          {view === "study-lab" && <AiStudyLab onNavigate={(v) => navigate(v as View)} />}
 
           {view === "study-groups" && (
             <StudyGroups
