@@ -95,7 +95,7 @@ import { QuizProgressView } from "@/components/quiz-progress";
 import { GeneratedFlashcardsLibrary } from "@/components/study-material-libraries";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { AudioPlayer } from "@/components/audio-player"
-import { UsageTracker } from "@/components/usage-tracker";;
+import { UsageTracker } from "@/components/usage-tracker";
 import { LectureCaptureModal } from "@/components/lecture-capture-modal";
 import { ReviewModal } from "@/components/review-section";
 import { AppTour } from "@/components/app-tour";

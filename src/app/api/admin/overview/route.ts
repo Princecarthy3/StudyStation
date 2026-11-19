@@ -171,7 +171,7 @@ export async function GET() {
     const authMau = new Set<string>();
     const authActive14d = new Set<string>();
     for (const u of authUsers) {
-      const last = (u.last_sign_in_at || u.last_sign_in || null) as string | null;
+      const last = ((u as { last_sign_in_at?: string | null }).last_sign_in_at || null) as string | null;
       if (!last) continue;
       const id = u.id as string;
       if (last >= dayAgo) authDau.add(id);
