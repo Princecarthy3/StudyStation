@@ -3491,9 +3491,6 @@ function FunctionalAssistantView({
                 </div>
               </div>
             </form>
-            <p className="mt-1.5 text-center text-[10px] text-[#a39dac]">
-              Return for a new line · Ctrl/⌘ + Enter to send
-            </p>
 
             <input
               ref={fileInputRef}
