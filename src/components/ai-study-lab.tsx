@@ -207,7 +207,7 @@ export function AiStudyLab({
 
     setGenerating(true);
     try {
-      const maxCount = action === "quiz" ? 30 : 20;
+      const maxCount = action === "quiz" ? 100 : 20;
       const parsed = Math.round(Number(countInput));
       const finalCount = Number.isFinite(parsed) && parsed >= 3 ? Math.min(maxCount, parsed) : 8;
 
@@ -344,41 +344,67 @@ export function AiStudyLab({
                   </label>
                 )}
                 {(action === "quiz" || action === "flashcards") && (
-                  <label className="text-[10px] font-extrabold text-[#5d5768]">
-                    {action === "quiz" ? "QUESTION COUNT" : "CARD COUNT"}
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="e.g. 10"
-                      value={countInput}
-                      onChange={(event) => {
-                        const val = event.target.value.replace(/[^0-9]/g, "");
-                        setCountInput(val);
-                        const num = Number(val);
-                        if (Number.isFinite(num) && num > 0) {
-                          setCount(num);
-                        }
-                      }}
-                      onBlur={() => {
-                        const max = action === "quiz" ? 30 : 20;
-                        if (!countInput || countInput.trim() === "") {
-                          setCountInput("8");
-                          setCount(8);
-                        } else {
-                          const num = Math.round(Number(countInput));
-                          const clamped = Math.min(max, Math.max(3, num));
-                          setCountInput(String(clamped));
-                          setCount(clamped);
-                        }
-                      }}
-                      className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"
-                    />
-                    <span className="mt-1 flex items-center justify-between text-[10px] font-medium text-[#7a7485]">
-                      <span>Limit: <strong>3</strong> – <strong>{action === "quiz" ? 30 : 20}</strong> {action === "quiz" ? "questions" : "cards"}</span>
-                      <span className="font-bold text-[#7259e8]">{action === "quiz" ? "Max: 30" : "Max: 20"}</span>
-                    </span>
-                  </label>
+                  <div>
+                    <label className="text-[10px] font-extrabold text-[#5d5768]">
+                      {action === "quiz" ? "QUESTION COUNT (UP TO 100)" : "CARD COUNT"}
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder={action === "quiz" ? "e.g. 25 (up to 100)" : "e.g. 10"}
+                        value={countInput}
+                        onChange={(event) => {
+                          const val = event.target.value.replace(/[^0-9]/g, "");
+                          setCountInput(val);
+                          const num = Number(val);
+                          if (Number.isFinite(num) && num > 0) {
+                            setCount(num);
+                          }
+                        }}
+                        onBlur={() => {
+                          const max = action === "quiz" ? 100 : 20;
+                          if (!countInput || countInput.trim() === "") {
+                            setCountInput("8");
+                            setCount(8);
+                          } else {
+                            const num = Math.round(Number(countInput));
+                            const clamped = Math.min(max, Math.max(3, num));
+                            setCountInput(String(clamped));
+                            setCount(clamped);
+                          }
+                        }}
+                        className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"
+                      />
+                      <span className="mt-1 flex items-center justify-between text-[10px] font-medium text-[#7a7485]">
+                        <span>Limit: <strong>3</strong> – <strong>{action === "quiz" ? 100 : 20}</strong> {action === "quiz" ? "questions" : "cards"}</span>
+                        <span className="font-bold text-[#7259e8]">{action === "quiz" ? "Max: 100 questions" : "Max: 20"}</span>
+                      </span>
+                    </label>
+
+                    {/* Quick Question Count Chips for Quizzes */}
+                    {action === "quiz" && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[9px] font-bold text-[#8a8496]">Presets:</span>
+                        {[5, 10, 20, 30, 50, 75, 100].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              setCountInput(String(preset));
+                              setCount(preset);
+                            }}
+                            className={`rounded-lg px-2 py-0.5 text-[9px] font-black transition ${
+                              countInput === String(preset)
+                                ? "bg-[#7259e8] text-white shadow-2xs"
+                                : "border border-[#e6e1ed] bg-white text-[#5d566d] hover:bg-[#faf9fd]"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <label className="mt-4 block text-[10px] font-extrabold text-[#5d5768]">OPTIONAL INSTRUCTIONS

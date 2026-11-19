@@ -181,7 +181,8 @@ export async function POST(request: Request) {
   const difficultyRaw = typeof body.difficulty === "string" ? body.difficulty : "standard";
   const question = typeof body.question === "string" ? body.question.trim() : "";
   const rawCount = body.count === undefined || body.count === null ? 8 : Number(body.count);
-  const count = Number.isFinite(rawCount) ? Math.min(30, Math.max(3, Math.round(rawCount))) : 8;
+  const maxAllowedCount = action === "quiz" ? 100 : 20;
+  const count = Number.isFinite(rawCount) ? Math.min(maxAllowedCount, Math.max(3, Math.round(rawCount))) : 8;
   if (instructions.length > 1000) return badRequest("Keep extra instructions under 1,000 characters.");
   const difficulty = (() => {
     const d = String(difficultyRaw || "standard").trim().toLowerCase();
@@ -196,8 +197,8 @@ export async function POST(request: Request) {
     if (["mixed", "all", "any", "combination"].includes(rawQuestionType)) return "mixed";
     return "multiple_choice";
   })();
-  if (action === "quiz" && (count < 3 || count > 30)) {
-    return badRequest("Choose between 3 and 30 quiz questions.");
+  if (action === "quiz" && (count < 3 || count > 100)) {
+    return badRequest("Choose between 3 and 100 quiz questions.");
   }
   if (action === "flashcards" && (count < 3 || count > 20)) {
     return badRequest("Choose between 3 and 20 flashcards.");
@@ -280,7 +281,7 @@ export async function POST(request: Request) {
     ].join("\n\n"), {
       model,
       temperature: 0.2,
-      maxOutputTokens: 8192,
+      maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 8192,
     });
     raw = generated.text;
     usedModel = generated.model;
@@ -320,7 +321,7 @@ export async function POST(request: Request) {
       ].join("\n\n"), {
         model,
         temperature: 0.2,
-        maxOutputTokens: 8192,
+        maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 8192,
       });
       const repairedRaw = parseJsonObject<unknown>(repaired.text);
       const normalized = normalizeQuizOutput(repairedRaw, repairCount);

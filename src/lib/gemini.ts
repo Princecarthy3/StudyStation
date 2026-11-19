@@ -149,7 +149,7 @@ export async function geminiChat(
         "x-goog-api-key": apiKey,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(120_000),
     });
   } catch (fetchErr) {
     // If network/timeout fails, check if another fallback model can be tried
