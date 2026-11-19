@@ -2928,6 +2928,7 @@ function FunctionalAssistantView({
   const readyLectures = useMemo(() => lectures.filter((l) => l.status === "ready"), [lectures]);
   const [showFocusPicker, setShowFocusPicker] = useState(false);
   const [showMobileHistory, setShowMobileHistory] = useState(false);
+  const [showComposerMenu, setShowComposerMenu] = useState(false);
   const [attachedImages, setAttachedImages] = useState<Array<{ name: string; mimeType: string; data: string; previewUrl: string }>>([]);
   const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; text?: string; mimeType?: string }>>([]);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -2935,6 +2936,7 @@ function FunctionalAssistantView({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const courseMap = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const selectedLabel = useMemo(() => {
@@ -3302,25 +3304,8 @@ function FunctionalAssistantView({
             )}
           </div>
 
-          {/* Chat Inputs */}
+          {/* Chat Inputs — + menu, multi-line composer, mic next to send */}
           <div className="border-t border-[#ece8f0] bg-white p-3 sm:p-4">
-            <div className="mb-2.5 flex gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {[
-                { label: "Summarize lectures", prompt: "Summarize the main concepts from my lectures" },
-                { label: "Explain simply", prompt: "Explain this like I'm new to the subject" },
-                { label: "Practice questions", prompt: "Generate 3 practice recall questions" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => ask(item.prompt)}
-                  className="shrink-0 rounded-full border border-[#e4e0e9] bg-[#faf9fd] px-3.5 py-2 text-[13px] font-semibold text-[#4a4458] transition hover:border-[#7259e8] hover:text-[#7259e8]"
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
             {selectedLectureId !== "all" && (
               <div className="mb-2 flex items-center gap-2">
                 <span className="min-w-0 truncate rounded-full bg-[#eeeaff] px-3 py-1 text-[12px] font-bold text-[#5b47bd]">
@@ -3336,17 +3321,16 @@ function FunctionalAssistantView({
               </div>
             )}
 
-            {/* Attached items preview strip */}
             {(attachedImages.length > 0 || attachedFiles.length > 0) && (
-              <div className="mb-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-[#ece7f4] bg-[#fbfaff] p-2">
+              <div className="mb-2.5 flex flex-wrap items-center gap-2">
                 {attachedImages.map((img, i) => (
-                  <div key={`img-${i}`} className="group relative flex items-center gap-1.5 rounded-lg border border-[#e2daf8] bg-white p-1 pr-2 shadow-2xs">
-                    <img src={img.previewUrl} alt={img.name} className="size-8 rounded object-cover" />
-                    <span className="max-w-[120px] truncate text-[11px] font-bold text-[#2e263d]">{img.name}</span>
+                  <div key={`img-${i}-${img.name}`} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.previewUrl} alt={img.name} className="h-14 w-14 rounded-xl object-cover ring-1 ring-[#e4dff0]" />
                     <button
                       type="button"
                       onClick={() => setAttachedImages((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="ml-1 text-[#8f8899] hover:text-[#d32f2f]"
+                      className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-[#17132d] text-white"
                       aria-label="Remove image"
                     >
                       <X className="size-3" />
@@ -3354,27 +3338,92 @@ function FunctionalAssistantView({
                   </div>
                 ))}
                 {attachedFiles.map((file, i) => (
-                  <div key={`file-${i}`} className="flex items-center gap-1.5 rounded-lg border border-[#e2daf8] bg-white px-2 py-1 shadow-2xs">
-                    <FileText className="size-3.5 text-[#7259e8]" />
-                    <span className="max-w-[140px] truncate text-[11px] font-bold text-[#2e263d]">{file.name}</span>
+                  <div key={`file-${i}-${file.name}`} className="flex items-center gap-1.5 rounded-xl border border-[#e4dff0] bg-[#faf9fd] px-2.5 py-1.5 text-[11px] font-semibold text-[#4a4458]">
+                    <Paperclip className="size-3.5 text-[#7259e8]" />
+                    <span className="max-w-[120px] truncate">{file.name}</span>
                     <button
                       type="button"
                       onClick={() => setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="ml-1 text-[#8f8899] hover:text-[#d32f2f]"
+                      className="text-[#8a8494]"
                       aria-label="Remove file"
                     >
-                      <X className="size-3" />
+                      <X className="size-3.5" />
                     </button>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Voice Notice Strip */}
             {voiceNotice && (
-              <div className="mb-2.5 flex items-center gap-2 rounded-xl bg-[#f4f0ff] px-3 py-1.5 text-xs font-bold text-[#7259e8] animate-pulse">
-                <Mic className="size-3.5" />
-                <span>{voiceNotice}</span>
+              <p className="mb-2 text-[11px] font-semibold text-[#7259e8]">{voiceNotice}</p>
+            )}
+
+            {showComposerMenu && (
+              <div className="mb-2 overflow-hidden rounded-2xl border border-[#e8e4ed] bg-white shadow-sm">
+                <p className="border-b border-[#f0ecf5] px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] text-[#8a8494]">
+                  Tools & prompts
+                </p>
+                <div className="grid grid-cols-1 gap-0.5 p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowComposerMenu(false);
+                      setShowFocusPicker(true);
+                    }}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#2c2638] hover:bg-[#f7f5fb]"
+                  >
+                    <span className="grid size-9 place-items-center rounded-xl bg-[#eeeaff] text-[#7259e8]">
+                      <BookOpen className="size-4" />
+                    </span>
+                    Focus a course or lecture
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowComposerMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#2c2638] hover:bg-[#f7f5fb]"
+                  >
+                    <span className="grid size-9 place-items-center rounded-xl bg-[#f4f1fb] text-[#7259e8]">
+                      <Paperclip className="size-4" />
+                    </span>
+                    Attach file or photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowComposerMenu(false);
+                      cameraInputRef.current?.click();
+                    }}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#2c2638] hover:bg-[#f7f5fb]"
+                  >
+                    <span className="grid size-9 place-items-center rounded-xl bg-[#f4f1fb] text-[#7259e8]">
+                      <Camera className="size-4" />
+                    </span>
+                    Take a photo
+                  </button>
+                  {[
+                    { label: "Summarize lectures", prompt: "Summarize the main concepts from my lectures" },
+                    { label: "Explain simply", prompt: "Explain this like I'm new to the subject" },
+                    { label: "Practice questions", prompt: "Generate 3 practice recall questions" },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => {
+                        setShowComposerMenu(false);
+                        handleSend(item.prompt);
+                      }}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#2c2638] hover:bg-[#f7f5fb]"
+                    >
+                      <span className="grid size-9 place-items-center rounded-xl bg-[#f4f1fb] text-[#7259e8]">
+                        <Sparkles className="size-4" />
+                      </span>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -3383,81 +3432,69 @@ function FunctionalAssistantView({
                 e.preventDefault();
                 handleSend();
               }}
-              className="flex items-end gap-1.5 sm:gap-2 rounded-2xl border border-[#ded8e8] bg-[#faf9fd] p-2 focus-within:border-[#7259e8] focus-within:bg-white"
+              className="rounded-2xl border border-[#ded8e8] bg-[#faf9fd] p-2 focus-within:border-[#7259e8] focus-within:bg-white"
             >
-              {/* Focus Button */}
-              <button
-                type="button"
-                onClick={() => setShowFocusPicker(true)}
-                aria-label="Choose course or lecture focus"
-                title="Focus on specific lecture or course"
-                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-[#eeeaff] text-[#7259e8] transition hover:bg-[#e4dcff]"
-              >
-                <Plus className="size-4.5" />
-              </button>
-
-              {/* Attach File Button */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach documents or images"
-                title="Attach file or picture"
-                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl border border-[#e6e1ee] bg-white text-[#635c71] transition hover:bg-[#f6f4fc] hover:text-[#7259e8]"
-              >
-                <Paperclip className="size-4" />
-              </button>
-
-              {/* Take Picture Camera Button */}
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                aria-label="Take picture with camera"
-                title="Snap photo with camera"
-                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl border border-[#e6e1ee] bg-white text-[#635c71] transition hover:bg-[#f6f4fc] hover:text-[#7259e8]"
-              >
-                <Camera className="size-4" />
-              </button>
-
-              {/* Voice transcribe and execute Button */}
-              <button
-                type="button"
-                onClick={toggleVoice}
-                aria-label={isRecordingVoice ? "Stop voice listening" : "Speak to AI (transcribe and execute)"}
-                title={isRecordingVoice ? "Stop listening" : "Speak prompt (transcribes & executes)"}
-                className={`mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl transition ${
-                  isRecordingVoice
-                    ? "animate-pulse bg-[#ef4444] text-white shadow-md ring-4 ring-[#ef4444]/30"
-                    : "border border-[#e6e1ee] bg-white text-[#635c71] hover:bg-[#f6f4fc] hover:text-[#7259e8]"
-                }`}
-              >
-                {isRecordingVoice ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-              </button>
-
               <textarea
+                ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  const el = e.target;
+                  el.style.height = "auto";
+                  el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  // Return = new line. Ctrl/⌘+Enter sends.
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
                     handleSend();
                   }
                 }}
-                rows={1}
-                placeholder={isRecordingVoice ? "Listening... speak now…" : "Ask about your coursework, attach pictures or documents…"}
-                className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-1.5 py-2.5 text-[15px] leading-snug outline-none placeholder:text-[#aaa4b1] sm:text-[14px]"
+                rows={2}
+                placeholder={isRecordingVoice ? "Listening… speak now" : "Ask about your coursework…"}
+                className="max-h-42 min-h-[52px] w-full resize-none bg-transparent px-2.5 py-2.5 text-[16px] leading-6 text-[#17132d] outline-none placeholder:text-[#aaa4b1]"
               />
-
-              <button
-                type="submit"
-                disabled={loading || (!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0)}
-                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white transition hover:bg-[#6247df] disabled:opacity-40"
-                aria-label="Send message"
-              >
-                <Send className="size-4" />
-              </button>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowComposerMenu((v) => !v)}
+                  aria-label="More tools"
+                  aria-expanded={showComposerMenu}
+                  className={`grid size-10 shrink-0 place-items-center rounded-xl transition ${
+                    showComposerMenu ? "bg-[#7259e8] text-white" : "bg-[#eeeaff] text-[#7259e8] hover:bg-[#e4dcff]"
+                  }`}
+                >
+                  <Plus className={`size-5 transition ${showComposerMenu ? "rotate-45" : ""}`} />
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={toggleVoice}
+                    aria-label={isRecordingVoice ? "Stop voice listening" : "Speak to AI"}
+                    title={isRecordingVoice ? "Stop listening" : "Speak prompt"}
+                    className={`grid size-10 shrink-0 place-items-center rounded-xl transition ${
+                      isRecordingVoice
+                        ? "animate-pulse bg-[#ef4444] text-white shadow-md ring-4 ring-[#ef4444]/30"
+                        : "border border-[#e6e1ee] bg-white text-[#635c71] hover:bg-[#f6f4fc] hover:text-[#7259e8]"
+                    }`}
+                  >
+                    {isRecordingVoice ? <MicOff className="size-4" /> : <Mic className="size-5" />}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading || (!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0)}
+                    className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white transition hover:bg-[#6247df] disabled:opacity-40"
+                    aria-label="Send message"
+                  >
+                    <Send className="size-4" />
+                  </button>
+                </div>
+              </div>
             </form>
+            <p className="mt-1.5 text-center text-[10px] text-[#a39dac]">
+              Return for a new line · Ctrl/⌘ + Enter to send
+            </p>
 
-            {/* Hidden file inputs */}
             <input
               ref={fileInputRef}
               type="file"
