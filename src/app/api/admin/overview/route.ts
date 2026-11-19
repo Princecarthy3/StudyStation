@@ -16,6 +16,12 @@ export async function GET() {
     const startTime = Date.now();
 
     // Run parallel analytical queries using Supabase Admin
+    const now = new Date();
+    const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const inactiveCutoff = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
     const [
       profilesRes,
       authUsersRes,
@@ -28,6 +34,8 @@ export async function GET() {
       recentLecturesRes,
       recentAiRes,
       storageBucketsRes,
+      sessionsRes,
+      eventsRes,
     ] = await Promise.all([
       // 1. All profiles count & onboarding stats (only valid columns)
       adminClient.from("profiles").select("id, onboarding_complete, full_name, university"),
@@ -63,6 +71,18 @@ export async function GET() {
         .limit(6),
       // 11. Check storage bucket
       adminClient.storage.listBuckets(),
+      // 12. App sessions (may be empty before migration)
+      adminClient
+        .from("app_sessions")
+        .select("id, user_id, started_at, last_seen_at, duration_seconds")
+        .gte("last_seen_at", monthAgo)
+        .limit(5000),
+      // 13. Feature usage events (last 30 days)
+      adminClient
+        .from("usage_events")
+        .select("feature, user_id, created_at")
+        .gte("created_at", monthAgo)
+        .limit(10000),
     ]);
 
     const dbLatencyMs = Date.now() - startTime;
@@ -127,6 +147,98 @@ export async function GET() {
     const buckets = storageBucketsRes.data ?? [];
     const lecturesBucketExists = buckets.some((b) => b.name === "lectures");
 
+    // --- Engagement metrics (sessions + auth last_sign_in fallback) ---
+    const sessions = (!sessionsRes.error && sessionsRes.data) ? sessionsRes.data : [];
+    const events = (!eventsRes.error && eventsRes.data) ? eventsRes.data : [];
+
+    const uniqueFrom = (rows: Array<{ user_id?: string | null }>, sinceIso: string, field: "last_seen_at" | "started_at" = "last_seen_at") => {
+      const set = new Set<string>();
+      for (const row of rows as Array<Record<string, string>>) {
+        const ts = row[field];
+        const uid = row.user_id;
+        if (uid && ts && ts >= sinceIso) set.add(uid);
+      }
+      return set;
+    };
+
+    const sessionDau = uniqueFrom(sessions, dayAgo);
+    const sessionWau = uniqueFrom(sessions, weekAgo);
+    const sessionMau = uniqueFrom(sessions, monthAgo);
+
+    // Fallback: auth last_sign_in_at when session table is empty/new
+    const authDau = new Set<string>();
+    const authWau = new Set<string>();
+    const authMau = new Set<string>();
+    const authActive14d = new Set<string>();
+    for (const u of authUsers) {
+      const last = (u.last_sign_in_at || u.last_sign_in || null) as string | null;
+      if (!last) continue;
+      const id = u.id as string;
+      if (last >= dayAgo) authDau.add(id);
+      if (last >= weekAgo) authWau.add(id);
+      if (last >= monthAgo) authMau.add(id);
+      if (last >= inactiveCutoff) authActive14d.add(id);
+    }
+
+    const useSessions = sessions.length > 0;
+    const dau = useSessions ? sessionDau.size : authDau.size;
+    const wau = useSessions ? sessionWau.size : authWau.size;
+    const mau = useSessions ? sessionMau.size : authMau.size;
+
+    // Session duration: prefer duration_seconds, else last_seen - started
+    let totalUsageSeconds = 0;
+    let sessionCountForAvg = 0;
+    for (const s of sessions) {
+      let dur = typeof s.duration_seconds === "number" ? s.duration_seconds : 0;
+      if (dur <= 0 && s.started_at && s.last_seen_at) {
+        dur = Math.max(0, Math.round((new Date(s.last_seen_at).getTime() - new Date(s.started_at).getTime()) / 1000));
+      }
+      // Cap pathological heartbeats at 6 hours per session
+      dur = Math.min(dur, 6 * 60 * 60);
+      if (dur > 0) {
+        totalUsageSeconds += dur;
+        sessionCountForAvg += 1;
+      }
+    }
+    const averageSessionSeconds = sessionCountForAvg > 0 ? Math.round(totalUsageSeconds / sessionCountForAvg) : 0;
+    const activeUserCountForAvg = useSessions ? sessionMau.size : Math.max(authMau.size, 1);
+    const averageTimePerUserSeconds = activeUserCountForAvg > 0 ? Math.round(totalUsageSeconds / activeUserCountForAvg) : 0;
+
+    // Most used features
+    const featureCounts = new Map<string, number>();
+    for (const e of events) {
+      const key = (e.feature || "other") as string;
+      featureCounts.set(key, (featureCounts.get(key) || 0) + 1);
+    }
+    // Fallback feature popularity from product tables when events empty
+    if (featureCounts.size === 0) {
+      featureCounts.set("studio", lecturesBySource.recording + lecturesBySource.audio + lecturesBySource.video + lecturesBySource.document);
+      featureCounts.set("assistant", aiByTask.question);
+      featureCounts.set("study_lab", aiByTask.quiz + aiByTask.flashcards + aiByTask.summary);
+      featureCounts.set("groups", groupsRes.count ?? 0);
+      featureCounts.set("notes", notesRes.count ?? 0);
+    }
+    const mostUsedFeatures = [...featureCounts.entries()]
+      .map(([feature, count]) => ({ feature, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    const registeredIds = new Set((profilesRes.data ?? []).map((p) => p.id as string));
+    if (registeredIds.size === 0) {
+      for (const u of authUsers) registeredIds.add(u.id as string);
+    }
+    let inactiveUsers = 0;
+    if (useSessions) {
+      const active14 = uniqueFrom(sessions, inactiveCutoff);
+      for (const id of registeredIds) {
+        if (!active14.has(id)) inactiveUsers += 1;
+      }
+    } else {
+      for (const id of registeredIds) {
+        if (!authActive14d.has(id)) inactiveUsers += 1;
+      }
+    }
+
     return NextResponse.json({
       metrics: {
         totalStudents,
@@ -147,6 +259,19 @@ export async function GET() {
         totalReviews,
         averageRating,
         ratingBreakdown,
+        engagement: {
+          totalRegisteredUsers: totalStudents,
+          dau,
+          wau,
+          mau,
+          averageSessionSeconds,
+          totalUsageSeconds,
+          averageTimePerUserSeconds,
+          mostUsedFeatures,
+          inactiveUsers,
+          inactiveDays: 14,
+          source: useSessions ? "sessions" : "auth_fallback",
+        },
       },
       recent: {
         signups: recentSignupsRes.data ?? [],

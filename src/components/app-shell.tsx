@@ -94,7 +94,8 @@ import { StudyCalendar } from "@/components/study-calendar";
 import { QuizProgressView } from "@/components/quiz-progress";
 import { GeneratedFlashcardsLibrary } from "@/components/study-material-libraries";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { AudioPlayer } from "@/components/audio-player";
+import { AudioPlayer } from "@/components/audio-player"
+import { UsageTracker } from "@/components/usage-tracker";;
 import { LectureCaptureModal } from "@/components/lecture-capture-modal";
 import { ReviewModal } from "@/components/review-section";
 import { AppTour } from "@/components/app-tour";
@@ -1270,6 +1271,7 @@ export function AppShell({
 
   return (
     <div className="workspace-shell min-h-screen overflow-x-clip bg-[#f7f6fb] text-[#17132d]">
+      <UsageTracker view={view} />
       <NetworkStatusBanner />
       {sidebarOpen && (
         <button

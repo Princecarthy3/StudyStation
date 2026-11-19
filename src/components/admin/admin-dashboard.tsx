@@ -57,6 +57,19 @@ type OverviewData = {
     totalReviews: number;
     averageRating: number;
     ratingBreakdown: Record<string, number>;
+    engagement?: {
+      totalRegisteredUsers: number;
+      dau: number;
+      wau: number;
+      mau: number;
+      averageSessionSeconds: number;
+      totalUsageSeconds: number;
+      averageTimePerUserSeconds: number;
+      mostUsedFeatures: Array<{ feature: string; count: number }>;
+      inactiveUsers: number;
+      inactiveDays: number;
+      source: "sessions" | "auth_fallback";
+    };
   };
   recent: {
     signups: Array<{
@@ -86,6 +99,33 @@ type OverviewData = {
     serverTimestamp: string;
   };
 };
+
+function formatDuration(totalSeconds: number) {
+  const s = Math.max(0, Math.round(totalSeconds || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+function featureLabel(feature: string) {
+  const map: Record<string, string> = {
+    home: "Home / Dashboard",
+    studio: "Lecture Studio",
+    record: "Record lecture",
+    assistant: "Ask StudyStation",
+    study_lab: "AI Study Lab",
+    groups: "Study groups",
+    planner: "Study planner",
+    courses: "Courses",
+    profile: "Profile",
+    progress: "Progress",
+    notifications: "Notifications",
+    notes: "Notes",
+    other: "Other",
+  };
+  return map[feature] || feature;
+}
 
 type Student = {
   id: string;
@@ -779,6 +819,67 @@ export function AdminDashboard({ adminEmail }: { adminEmail: string }) {
               <div>
                 <h1 className="text-xl font-bold text-white tracking-tight">System Overview & Intelligence</h1>
                 <p className="text-xs text-slate-400 mt-1">Real-time statistics across all registered university students and content</p>
+              </div>
+
+              {/* Engagement & retention */}
+              <div className="rounded-2xl border border-white/[0.08] bg-[#0f1320]/80 p-5 backdrop-blur-xl">
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-bold text-white">Engagement & retention</h2>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Active users, time on app, and features students use most
+                      {overview?.metrics?.engagement?.source === "auth_fallback"
+                        ? " · using sign-in data until session tracking warms up"
+                        : overview?.metrics?.engagement
+                          ? " · live session tracking"
+                          : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {[
+                    { label: "Registered users", value: overview?.metrics?.engagement?.totalRegisteredUsers ?? overview?.metrics?.totalStudents ?? "—", hint: "Total accounts" },
+                    { label: "DAU", value: overview?.metrics?.engagement?.dau ?? "—", hint: "Active today" },
+                    { label: "WAU", value: overview?.metrics?.engagement?.wau ?? "—", hint: "Active this week" },
+                    { label: "MAU", value: overview?.metrics?.engagement?.mau ?? "—", hint: "Active this month" },
+                    { label: "Avg session", value: overview?.metrics?.engagement ? formatDuration(overview.metrics.engagement.averageSessionSeconds) : "—", hint: "Time per session" },
+                    { label: "Avg time / user", value: overview?.metrics?.engagement ? formatDuration(overview.metrics.engagement.averageTimePerUserSeconds) : "—", hint: "Per active user (30d)" },
+                    { label: "Total platform time", value: overview?.metrics?.engagement ? formatDuration(overview.metrics.engagement.totalUsageSeconds) : "—", hint: "All users combined (30d)" },
+                    { label: "Inactive users", value: overview?.metrics?.engagement?.inactiveUsers ?? "—", hint: `No activity in ${overview?.metrics?.engagement?.inactiveDays ?? 14} days` },
+                  ].map((card) => (
+                    <div key={card.label} className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{card.label}</p>
+                      <p className="mt-1.5 text-2xl font-extrabold tracking-tight text-white">{card.value}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{card.hint}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Most used features</p>
+                  <div className="space-y-2">
+                    {(overview?.metrics?.engagement?.mostUsedFeatures?.length
+                      ? overview.metrics.engagement.mostUsedFeatures
+                      : []
+                    ).map((item) => {
+                      const max = overview?.metrics?.engagement?.mostUsedFeatures?.[0]?.count || 1;
+                      const pct = Math.round((item.count / max) * 100);
+                      return (
+                        <div key={item.feature}>
+                          <div className="mb-1 flex justify-between text-[11px]">
+                            <span className="text-slate-300">{featureLabel(item.feature)}</span>
+                            <span className="font-semibold text-white">{item.count}</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                            <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {!overview?.metrics?.engagement?.mostUsedFeatures?.length && (
+                      <p className="text-[11px] text-slate-500">Feature usage will appear as students use the app.</p>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* KPI Grid */}
