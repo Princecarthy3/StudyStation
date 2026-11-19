@@ -1,5 +1,6 @@
-import { hasOpenRouterKey, openRouterChat, parseJsonObject } from "@/lib/openrouter";
+import { hasOpenRouterKey, openRouterChat } from "@/lib/openrouter";
 import { hasGeminiKey, geminiGenerateJson } from "@/lib/gemini";
+import { parseJsonObjectSafe } from "@/lib/safe-json";
 
 export type OrganizedKeyTerm = {
   term: string;
@@ -40,38 +41,70 @@ export type NoteRecord = {
 };
 
 /**
+ * Strips all page markers, slide headers, and repetitive slide footers from document text.
+ */
+export function cleanTranscript(raw: string): string {
+  if (!raw) return "";
+  return raw
+    // Strip "--- Page X ---" or "--- Slide X ---" line markers
+    .replace(/^---\s*(?:Page|Slide)\s*\d+\s*---\s*$/gim, "")
+    // Strip inline "--- Page X ---"
+    .replace(/---\s*(?:Page|Slide)\s*\d+\s*---/gi, "")
+    // Strip repeating page numbers like "1 / 38", "2 / 38", "Page 1 of 38"
+    .replace(/\b\d+\s*\/\s*\d+\b/g, "")
+    .replace(/\bPage\s+\d+\s+of\s+\d+\b/gi, "")
+    // Normalize spaces and multiple blank lines
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Intelligent algorithmic fallback in case AI providers are unreachable or keys are not configured.
- * Parses the raw transcript into structured topics, key definitions, and revision takeaways.
+ * Cleans all page/slide markers and parses the transcript into structured topics, key definitions, and revision takeaways.
  */
 function generateStructuredFallback(transcript: string, title: string, courseTitle?: string): OrganizedNoteContent {
-  const paragraphs = transcript
+  const cleaned = cleanTranscript(transcript);
+  const paragraphs = cleaned
     .split(/\n\s*\n|\r\n\s*\r\n/)
     .map((p) => p.trim())
-    .filter((p) => p.length > 20);
+    // Filter out slide headers, page numbers, or short fragments
+    .filter((p) => p.length > 25 && !/^---\s*(?:Page|Slide)/i.test(p));
 
-  const sentences = transcript
+  const sentences = cleaned
     .split(/(?<=[.?!])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 15);
+    .filter((s) => s.length > 20 && !/^---\s*(?:Page|Slide)/i.test(s));
 
+  // Synthesize executive summary from introductory sentences without page metadata
   const summary = sentences.slice(0, 3).join(" ") ||
-    `This lecture on "${title}" covers key academic principles, structural methodologies, and practical applications discussed throughout the session.`;
+    `This lecture on "${title}" covers core principles, analytical methods, mathematical foundations, and practical applications presented in the material.`;
 
-  // Extract sections
+  // Dynamically group paragraphs into cohesive sections
   const sections: OrganizedNoteSection[] = [];
   if (paragraphs.length >= 3) {
-    const chunkSize = Math.max(1, Math.ceil(paragraphs.length / 3));
-    const labels = ["1. Introduction & Foundational Concepts", "2. Core Principles & Detailed Analysis", "3. Applications & Practical Review"];
-    for (let i = 0; i < 3; i++) {
+    const sectionCount = Math.min(6, Math.max(3, Math.ceil(paragraphs.length / 5)));
+    const chunkSize = Math.ceil(paragraphs.length / sectionCount);
+
+    for (let i = 0; i < sectionCount; i++) {
       const slice = paragraphs.slice(i * chunkSize, (i + 1) * chunkSize);
       if (slice.length) {
+        // Try to identify a heading from the first line of the slice
+        const firstLine = slice[0].split(/[.:\n]/)[0].trim();
+        const headingText = (firstLine.length > 5 && firstLine.length < 70)
+          ? firstLine
+          : `Core Topic ${i + 1}: Conceptual Analysis`;
+
         sections.push({
-          heading: labels[i] || `Section ${i + 1}`,
+          heading: `${i + 1}. ${headingText}`,
           body: slice.join("\n\n"),
-          bullets: slice.map((p) => p.slice(0, 140) + (p.length > 140 ? "…" : "")),
+          bullets: slice.slice(0, 4).map((p) => {
+            const trimmed = p.replace(/\s+/g, " ").trim();
+            return trimmed.slice(0, 140) + (trimmed.length > 140 ? "…" : "");
+          }),
           takeaways: [
-            `Understand the primary mechanism outlined in ${labels[i].toLowerCase()}.`,
-            `Connect these findings to the broader scope of ${courseTitle || "the subject"}.`,
+            `Key insight: review ${headingText.toLowerCase()} for problem sets and exam preparation.`,
+            `Connect these mechanisms to the broader objectives of ${courseTitle || title}.`,
           ],
         });
       }
@@ -79,56 +112,71 @@ function generateStructuredFallback(transcript: string, title: string, courseTit
   } else {
     sections.push({
       heading: "1. Core Lecture Overview",
-      body: transcript,
+      body: cleaned || transcript,
       bullets: sentences.slice(0, 5),
       takeaways: [
-        "Review the complete transcribed lecture to prepare for seminar questions.",
+        "Review key definitions, derivations, and formulas discussed in the source material.",
         "Highlight unfamiliar terms and cross-reference with syllabus materials.",
       ],
     });
   }
 
-  // Extract potential key terms from title and transcript
-  const keyTerms: OrganizedKeyTerm[] = [
-    {
-      term: title.replace(/[-_]+/g, " ").trim(),
-      definition: `Central subject of the lecture, exploring foundational definitions, key mechanisms, and analytical criteria.`,
-    },
-    {
-      term: "Core Methodology",
-      definition: "The step-by-step approach discussed by the lecturer to evaluate primary problems.",
-    },
-    {
-      term: "Primary Findings",
-      definition: "The key evidence and conclusions emphasized during the discussion.",
-    },
-  ];
+  // Extract realistic key terms from capitalized technical phrases or headers
+  const detectedTerms: string[] = [];
+  const termMatches = cleaned.match(/\b[A-Z][a-zA-Z]{3,}(?:\s+[A-Z][a-zA-Z]{3,}){1,2}\b/g) || [];
+  for (const match of termMatches) {
+    const t = match.trim();
+    if (!detectedTerms.includes(t) && !t.includes("Page") && !t.includes("Lecture") && !t.includes("University") && !t.includes("Chapter")) {
+      detectedTerms.push(t);
+    }
+    if (detectedTerms.length >= 5) break;
+  }
+
+  const keyTerms: OrganizedKeyTerm[] = detectedTerms.length >= 2
+    ? detectedTerms.map((term) => ({
+        term,
+        definition: `Fundamental concept in ${title}, detailing core theoretical principles, governing criteria, and practical problem-solving methods.`,
+      }))
+    : [
+        {
+          term: title.replace(/[-_]+/g, " ").trim(),
+          definition: `Foundational topic exploring analytical frameworks, problem definitions, and governing equations.`,
+        },
+        {
+          term: "Governing Principles & Equations",
+          definition: "The core mathematical or theoretical relationships established in the material.",
+        },
+        {
+          term: "Analytical Solutions & Applications",
+          definition: "Methods and techniques for solving problem instances and evaluating results.",
+        },
+      ];
 
   const takeaways: string[] = [
-    `Master the fundamental concepts presented in "${title}".`,
-    "Review specific definitions, examples, and formulas discussed in class.",
-    "Formulate connections between this lecture and previous module topics.",
-    "Use active recall questions to verify understanding before upcoming exams.",
+    `Master the fundamental formulas and theorems presented in "${title}".`,
+    "Review specific definitions, step-by-step mechanisms, and derivations from the lecture.",
+    "Formulate connections between this material and surrounding module coursework.",
+    "Use active recall questions to verify understanding before upcoming examinations.",
   ];
 
   const studyQuestions: OrganizedStudyQuestion[] = [
     {
-      question: `What was the primary thesis or problem analyzed in "${title}"?`,
+      question: `What are the primary governing principles or theorems analyzed in "${title}"?`,
       answer: summary,
     },
     {
-      question: "What evidence or arguments did the lecturer present to support this topic?",
-      answer: "Refer to the key takeaways and structured sections above for evidence cited during the lecture.",
+      question: "What mathematical or conceptual methods are introduced to solve problems in this topic?",
+      answer: "Refer to the core sections and analytical frameworks outlined above.",
     },
     {
-      question: "How does this topic apply to broader course assignments or practical exams?",
-      answer: "It provides theoretical grounding for upcoming problem sets and essay questions.",
+      question: "How do the concepts in this lecture apply to practical exam scenarios or problem sets?",
+      answer: "They establish the theoretical foundation and derivation steps needed for multi-step problem solving.",
     },
   ];
 
   const actionChecklist: string[] = [
-    "Re-read the core sections and verify understanding of key terms.",
-    "Practice explaining the primary concepts out loud without looking at notes.",
+    "Re-read the core sections and verify understanding of all key equations.",
+    "Practice deriving key formulas and solutions step-by-step without looking at notes.",
     "Add lecture points to your personal revision schedule in the Study Planner.",
   ];
 
@@ -149,10 +197,10 @@ function generateStructuredFallback(transcript: string, title: string, courseTit
 async function callGeminiForNotes(prompt: string): Promise<OrganizedNoteContent> {
   const { text } = await geminiGenerateJson(prompt, {
     temperature: 0.2,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 16384,
   });
   if (!text) throw new Error("Gemini returned an empty response");
-  return parseJsonObject<OrganizedNoteContent>(text);
+  return parseJsonObjectSafe<OrganizedNoteContent>(text);
 }
 
 /**
@@ -169,10 +217,12 @@ export async function generateOrganizedNote(params: {
     throw new Error("Cannot generate notes from an empty transcript.");
   }
 
+  // Pre-clean all page/slide markers and redundant numbering before passing to AI
+  const cleaned = cleanTranscript(transcript);
   // Support comprehensive multi-page documents (up to ~300k chars / ~50k words)
-  const clippedTranscript = transcript.slice(0, 300_000);
+  const clippedTranscript = cleaned.slice(0, 300_000);
 
-  const systemInstructions = `You are StudyStation's expert academic AI professor and study coach.
+  const systemInstructions = `You are StudyStation's expert academic AI professor and masterclass study coach.
 Your job is to transform the provided source document or lecture into organized, comprehensive, university-grade study notes.
 
 CRITICAL INSTRUCTIONS ON CONTENT SYNTHESIS & ANTI-META DIRECTIVE:
@@ -180,7 +230,7 @@ CRITICAL INSTRUCTIONS ON CONTENT SYNTHESIS & ANTI-META DIRECTIVE:
    - NEVER write meta-commentary about the pages, slides, or document structure.
    - ABSOLUTELY FORBIDDEN PHRASES: "Page 1 introduces...", "Slide 2 outlines...", "This slide presents...", "The document describes...", "The presentation covers...", "As stated in the outline...".
    - Treat the input as a unified academic textbook or masterclass lecture. Teach the ACTUAL SUBJECT MATTER directly to the student.
-   - If the material includes slide or page markers (such as "--- Page 1 ---" or "--- Slide 2 ---"), IGNORE them completely and NEVER mention pages or slides in your output.
+   - Ignore any remaining slide or page markers completely. NEVER mention pages or slides in your output.
    - If the beginning contains an outline, agenda, or title slide, DO NOT summarize it as an agenda. Immediately synthesize the core technical substance, theories, principles, and applications found throughout the entire document.
 
 2. DEPTH, SUBSTANCE, AND RIGOR:
@@ -189,7 +239,7 @@ CRITICAL INSTRUCTIONS ON CONTENT SYNTHESIS & ANTI-META DIRECTIVE:
    - For mathematical, engineering, or scientific topics, include relevant formulas, step-by-step mechanisms, and derivations. Format all mathematical and scientific notation in LaTeX ($...$ for inline expressions, $$...$$ for standalone equations). Ensure all LaTeX backslashes are properly escaped in JSON (e.g. \\\\frac{a}{b}, \\\\Delta, \\\\theta).
 
 3. COMPLETE THEMATIC SYNTHESIS:
-   - Synthesize the ENTIRE document from first principles to the final conclusions. Group related sections into cohesive thematic units (3 to 7 thematic sections).
+   - Synthesize the ENTIRE document from first principles to the final conclusions. Group related concepts into cohesive thematic units (3 to 7 thematic sections).
 
 Structure the response strictly as valid JSON with this exact schema:
 {
@@ -237,10 +287,10 @@ Guidelines:
   const userPrompt = `LECTURE TITLE: "${title}"
 ${courseTitle ? `COURSE: "${courseTitle}"` : ""}
 
-LECTURE TRANSCRIPT:
+LECTURE CONTENT:
 ${clippedTranscript}`;
 
-  // 1. Try Gemini API directly if configured (recommended: fast, generous tokens)
+  // 1. Try Gemini API directly if configured (recommended: fast, generous 1M context)
   if (hasGeminiKey()) {
     try {
       const combinedPrompt = `${systemInstructions}\n\n${userPrompt}`;
@@ -257,7 +307,7 @@ ${clippedTranscript}`;
         };
       }
     } catch (geminiErr) {
-      console.warn("Gemini note generation failed, trying fallback:", geminiErr);
+      console.error("[NoteGenerator] Gemini note generation failed:", geminiErr);
     }
   }
 
@@ -270,9 +320,9 @@ ${clippedTranscript}`;
           { role: "system", content: systemInstructions },
           { role: "user", content: userPrompt },
         ],
-        { model, temperature: 0.2, maxTokens: 6000 }
+        { model, temperature: 0.2, maxTokens: 12000 }
       );
-      const parsed = parseJsonObject<OrganizedNoteContent>(raw);
+      const parsed = parseJsonObjectSafe<OrganizedNoteContent>(raw);
       if (parsed.summary && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
         return {
           title: parsed.title || `${title} — Study Notes`,
@@ -285,10 +335,11 @@ ${clippedTranscript}`;
         };
       }
     } catch (openRouterErr) {
-      console.warn("OpenRouter note generation failed:", openRouterErr);
+      console.error("[NoteGenerator] OpenRouter note generation failed:", openRouterErr);
     }
   }
 
-  // 3. Fallback to algorithmic structural organizer
+  console.warn("[NoteGenerator] Falling back to intelligent structured organizer");
+  // 3. Fallback to algorithmic structural organizer (cleaned of all page/slide markers)
   return generateStructuredFallback(transcript, title, courseTitle);
 }

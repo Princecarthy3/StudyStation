@@ -1,3 +1,7 @@
+import { parseJsonObjectSafe } from "@/lib/safe-json";
+
+export { parseJsonObjectSafe };
+
 type GeminiResponse = {
   candidates?: Array<{
     content?: {
@@ -277,12 +281,9 @@ export async function geminiGenerateJson(
 }
 
 /**
- * Robust JSON object parser that safely extracts JSON from AI responses even if wrapped in markdown blocks.
+ * Robust JSON object parser that safely extracts JSON from AI responses,
+ * repairing LaTeX unescaped backslashes and truncated structures.
  */
 export function parseJsonObject<T>(value: string): T {
-  const cleaned = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("AI response did not contain valid JSON");
-  return JSON.parse(cleaned.slice(start, end + 1)) as T;
+  return parseJsonObjectSafe<T>(value);
 }
