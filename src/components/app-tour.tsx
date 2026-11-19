@@ -29,18 +29,11 @@ const TOUR_STEPS: TourStep[] = [
     body: "Add and organize the courses you’re taking. Lectures, tasks, and study work stay grouped by course.",
   },
   {
-    id: "lectures",
-    target: "lectures",
-    view: "lectures",
-    title: "Lecture Studio",
-    body: "Record or upload class audio, then turn it into a transcript and structured study notes.",
-  },
-  {
     id: "notes",
     target: "notes",
     view: "notes",
     title: "Notes library",
-    body: "All of your organized lecture notes live here — ready to reread, copy, or export when you need them.",
+    body: "Record or upload class lectures, search your transcripts, view organized AI study notes, and export PDFs — all in one unified knowledge hub.",
   },
   {
     id: "study-lab",

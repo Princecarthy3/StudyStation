@@ -16,6 +16,7 @@ type GeminiResponse = {
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: unknown;
+  images?: Array<{ mimeType: string; data: string }>;
 };
 
 export function hasGeminiKey(): boolean {
@@ -83,9 +84,26 @@ export async function geminiChat(
   const contents = conversationMessages.map((m) => {
     const role = m.role === "assistant" ? "model" : "user";
     const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    const parts: Array<Record<string, unknown>> = [{ text }];
+
+    if (m.images && Array.isArray(m.images)) {
+      for (const img of m.images) {
+        if (img?.data && img?.mimeType) {
+          // Remove potential data url prefix like "data:image/jpeg;base64," if present
+          const cleanData = img.data.includes(",") ? img.data.split(",")[1] : img.data;
+          parts.push({
+            inline_data: {
+              mime_type: img.mimeType,
+              data: cleanData,
+            },
+          });
+        }
+      }
+    }
+
     return {
       role,
-      parts: [{ text }],
+      parts,
     };
   });
 

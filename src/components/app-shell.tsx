@@ -14,6 +14,7 @@ import {
   BrainCircuit,
   CalendarDays,
   CalendarPlus,
+  Camera,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -43,10 +44,13 @@ import {
   MapPin,
   Menu,
   MessageSquareText,
+  Mic,
   Mic2,
+  MicOff,
   MoreHorizontal,
   NotebookTabs,
   PanelLeftClose,
+  Paperclip,
   Pause,
   Play,
   Plus,
@@ -121,7 +125,13 @@ type AppNotification = { id: string; type: string; title: string; body: string; 
 
 type Modal = "capture" | "flashcards" | "note" | null;
 type SourceTab = "record" | "upload";
-type ChatMessage = { role: "user" | "assistant"; content: string; citation?: string };
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  citation?: string;
+  images?: string[];
+  attachments?: string[];
+};
 type StoredChatThread = {
   id: string;
   title: string;
@@ -180,7 +190,6 @@ type SpeechRecognitionWindow = Window & {
 const navItems: Array<{ id: View; label: string; icon: typeof Home; section?: string }> = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
   { id: "courses", label: "My courses", icon: BookOpen },
-  { id: "lectures", label: "Lecture Studio", icon: AudioLines },
   { id: "notes", label: "Notes library", icon: NotebookTabs },
   { id: "flashcards", label: "Flashcards", icon: Layers3, section: "STUDY TOOLS" },
   { id: "quizzes", label: "Practice quizzes", icon: CircleHelp },
@@ -1034,7 +1043,7 @@ export function AppShell({
           body: JSON.stringify({ lectureId: created.lectureId }),
         }).catch(() => undefined);
         setModal(null);
-        setView("lectures");
+        setView("notes");
         setAutoOpenLectureId(created.lectureId);
         setLectureTitle("");
         setRecordedBlob(null);
@@ -1053,7 +1062,7 @@ export function AppShell({
       const processed = (await processResponse.json()) as { error?: string; status?: string };
       if (!processResponse.ok) {
         setModal(null);
-        setView("lectures");
+        setView("notes");
         setAutoOpenLectureId(created.lectureId);
         showToast(processed.error || (isDoc ? "The document was uploaded but could not be parsed yet. Retry it from Lecture Studio." : "The lecture was uploaded but could not be transcribed yet. Retry it from Lecture Studio."), "error");
         setLectureTitle("");
@@ -1091,7 +1100,7 @@ export function AppShell({
         ],
       }));
       setModal(null);
-      setView("lectures");
+      setView("notes");
       setAutoOpenLectureId(created.lectureId);
       setRecordedBlob(null);
       void recordingJournalRef.current?.clearActiveSession();
@@ -1187,11 +1196,23 @@ export function AppShell({
     await submitLecture(parts, title);
   }
 
-  async function askAssistant(question?: string, specificLectureId?: string) {
+  async function askAssistant(
+    question?: string,
+    specificLectureId?: string,
+    imagesPayload?: Array<{ mimeType: string; data: string; previewUrl: string }>,
+    attachmentsPayload?: Array<{ name: string; text?: string; mimeType?: string }>
+  ) {
     const prompt = (question ?? chatInput).trim();
-    if (!prompt || chatLoading) return;
+    if ((!prompt && (!imagesPayload || imagesPayload.length === 0)) || chatLoading) return;
 
-    setMessages((current) => [...current, { role: "user", content: prompt }]);
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: prompt || (imagesPayload && imagesPayload.length > 0 ? "Analyzing attached image…" : "Reviewing attached file…"),
+      ...(imagesPayload && imagesPayload.length > 0 ? { images: imagesPayload.map((img) => img.previewUrl) } : {}),
+      ...(attachmentsPayload && attachmentsPayload.length > 0 ? { attachments: attachmentsPayload.map((att) => att.name) } : {}),
+    };
+
+    setMessages((current) => [...current, userMessage]);
     setChatInput("");
     setChatLoading(true);
 
@@ -1228,10 +1249,12 @@ export function AppShell({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "ask",
-          question: prompt,
+          question: prompt || "Please analyze and explain what is shown in the attached image or file in detail.",
           context: contextPayload,
           history: prior,
           threadId: activeChatId,
+          images: imagesPayload?.map((img) => ({ mimeType: img.mimeType, data: img.data })),
+          attachments: attachmentsPayload?.map((att) => ({ name: att.name, text: att.text, mimeType: att.mimeType })),
         }),
       });
       const data = (await response.json()) as { answer?: string; error?: string };
@@ -1268,6 +1291,16 @@ export function AppShell({
     setActiveLectureNote(lecture);
     setModal("note");
   }
+
+  useEffect(() => {
+    if (autoOpenLectureId) {
+      const target = liveDashboard.lectures.find((l) => l.id === autoOpenLectureId);
+      if (target) {
+        openNote(target);
+        clearAutoOpenLecture();
+      }
+    }
+  }, [autoOpenLectureId, liveDashboard.lectures]);
 
   return (
     <div className="workspace-shell min-h-screen overflow-x-clip bg-[#f7f6fb] text-[#17132d]">
@@ -1546,7 +1579,7 @@ export function AppShell({
                 setSearch("");
               }}
               onOpenCourses={() => navigate("courses")}
-              onOpenLectures={() => navigate("lectures")}
+              onOpenLectures={() => navigate("notes")}
               onOpenPlanner={() => navigate("planner")}
             />
           )}
@@ -1573,23 +1606,7 @@ export function AppShell({
             />
           )}
 
-          {view === "lectures" && (
-            <LectureStudio
-              lectures={liveDashboard.lectures}
-              courses={liveDashboard.courses}
-              timezone={liveDashboard.timezone}
-              loadError={liveDashboard.errors.lectures}
-              autoOpenLectureId={autoOpenLectureId}
-              onAutoOpen={clearAutoOpenLecture}
-              onToast={showToast}
-              onUpload={() => {
-                setModal("capture");
-                setSourceTab("upload");
-              }}
-            />
-          )}
-
-          {view === "notes" && (
+          {(view === "lectures" || view === "notes") && (
             <FunctionalNotesView
               lectures={liveDashboard.lectures}
               courses={liveDashboard.courses}
@@ -1686,7 +1703,7 @@ export function AppShell({
       >
         {[
           { id: "dashboard" as View, label: "Home", icon: Home },
-          { id: "lectures" as View, label: "Studio", icon: AudioLines },
+          { id: "notes" as View, label: "Notes", icon: NotebookTabs },
           { id: "capture" as const, label: "Record", icon: Mic2 },
           { id: "study-lab" as View, label: "AI Lab", icon: Sparkles },
           { id: "study-groups" as View, label: "Groups", icon: UsersRound },
@@ -2239,35 +2256,43 @@ function FunctionalNoteModal({
               </button>
             </div>
             {note && (
-              <div className="hidden sm:flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <button
+                  type="button"
                   onClick={() => setNotesFullscreen(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-[#e5e1eb] bg-white px-2.5 py-1 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
+                  className="flex items-center gap-1 rounded-lg border border-[#e5e1eb] bg-white px-2 sm:px-2.5 py-1 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
+                  title="Full screen notes preview"
                 >
                   <Maximize2 className="size-3" />
-                  Full screen
+                  <span>Full screen</span>
                 </button>
                 <button
+                  type="button"
                   onClick={exportNotePdf}
-                  className="flex items-center gap-1.5 rounded-lg border border-[#cfc4f6] bg-[#f5f2ff] px-2.5 py-1 text-[10px] font-black text-[#7259e8] shadow-sm hover:bg-[#eae3fc]"
+                  className="flex items-center gap-1 rounded-lg border border-[#cfc4f6] bg-[#f5f2ff] px-2 sm:px-2.5 py-1 text-[10px] font-black text-[#7259e8] shadow-sm hover:bg-[#eae3fc]"
+                  title="Export PDF"
                 >
                   <FileDown className="size-3" />
-                  Export PDF
+                  <span>Export PDF</span>
                 </button>
                 <button
+                  type="button"
                   onClick={copyNoteMarkdown}
-                  className="flex items-center gap-1.5 rounded-lg border border-[#e5e1eb] bg-white px-2.5 py-1 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
+                  className="flex items-center gap-1 rounded-lg border border-[#e5e1eb] bg-white px-2 sm:px-2.5 py-1 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
+                  title="Copy Markdown"
                 >
                   {copiedNote ? <Check className="size-3 text-[#10b981]" /> : <Copy className="size-3" />}
-                  {copiedNote ? "Copied Markdown" : "Copy Markdown"}
+                  <span className="hidden xs:inline">{copiedNote ? "Copied" : "Copy Markdown"}</span>
                 </button>
                 <button
+                  type="button"
                   onClick={generateNotes}
                   disabled={generating}
-                  className="flex items-center gap-1.5 rounded-lg bg-[#f3eeff] px-2.5 py-1 text-[10px] font-extrabold text-[#7259e8] hover:bg-[#eae3fc] disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg bg-[#f3eeff] px-2 sm:px-2.5 py-1 text-[10px] font-extrabold text-[#7259e8] hover:bg-[#eae3fc] disabled:opacity-50"
+                  title="Regenerate Notes"
                 >
                   <RefreshCw className={`size-3 ${generating ? "animate-spin" : ""}`} />
-                  {generating ? "Updating..." : "Regenerate"}
+                  <span className="hidden sm:inline">{generating ? "Updating..." : "Regenerate"}</span>
                 </button>
               </div>
             )}
@@ -2888,7 +2913,12 @@ function FunctionalAssistantView({
   input: string;
   setInput: (value: string) => void;
   loading: boolean;
-  ask: (question?: string) => void;
+  ask: (
+    question?: string,
+    specificLectureId?: string,
+    images?: Array<{ mimeType: string; data: string; previewUrl: string }>,
+    attachments?: Array<{ name: string; text?: string; mimeType?: string }>
+  ) => void;
   chatThreads: StoredChatThread[];
   activeChatId: string;
   onNewChat: () => void;
@@ -2898,6 +2928,14 @@ function FunctionalAssistantView({
   const readyLectures = useMemo(() => lectures.filter((l) => l.status === "ready"), [lectures]);
   const [showFocusPicker, setShowFocusPicker] = useState(false);
   const [showMobileHistory, setShowMobileHistory] = useState(false);
+  const [attachedImages, setAttachedImages] = useState<Array<{ name: string; mimeType: string; data: string; previewUrl: string }>>([]);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; text?: string; mimeType?: string }>>([]);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceNotice, setVoiceNotice] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
   const courseMap = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const selectedLabel = useMemo(() => {
     if (selectedLectureId === "all") return "All materials";
@@ -2906,6 +2944,123 @@ function FunctionalAssistantView({
     const course = lecture.courseId ? courseMap.get(lecture.courseId) : null;
     return course ? `${course.code} · ${lecture.title}` : lecture.title;
   }, [selectedLectureId, readyLectures, courseMap]);
+
+  function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const cleanBase64 = result.includes(",") ? result.split(",")[1] : result;
+          setAttachedImages((prev) => [
+            ...prev,
+            {
+              name: file.name,
+              mimeType: file.type || "image/jpeg",
+              data: cleanBase64,
+              previewUrl: result,
+            },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = typeof reader.result === "string" ? reader.result : "";
+          setAttachedFiles((prev) => [
+            ...prev,
+            {
+              name: file.name,
+              text,
+              mimeType: file.type || "text/plain",
+            },
+          ]);
+        };
+        reader.readAsText(file);
+      }
+    }
+    event.target.value = "";
+  }
+
+  function handleSend(overridePrompt?: string) {
+    const textToSend = (overridePrompt ?? input).trim();
+    if (!textToSend && attachedImages.length === 0 && attachedFiles.length === 0) return;
+
+    ask(textToSend, undefined, attachedImages, attachedFiles);
+    setInput("");
+    setAttachedImages([]);
+    setAttachedFiles([]);
+  }
+
+  function toggleVoice() {
+    if (isRecordingVoice) {
+      recognitionRef.current?.stop();
+      setIsRecordingVoice(false);
+      setVoiceNotice("");
+      return;
+    }
+
+    const win = typeof window !== "undefined" ? (window as SpeechRecognitionWindow) : null;
+    const SpeechRec = win?.SpeechRecognition || win?.webkitSpeechRecognition;
+
+    if (!SpeechRec) {
+      setVoiceNotice("Speech recognition is not supported in this browser. Please type your request.");
+      setTimeout(() => setVoiceNotice(""), 4000);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRec();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      let finalTranscript = "";
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            finalTranscript += item[0].transcript;
+          } else {
+            interim += item[0].transcript;
+          }
+        }
+        const text = (finalTranscript || interim).trim();
+        if (text) {
+          setInput(text);
+        }
+      };
+
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        setIsRecordingVoice(false);
+        setVoiceNotice(`Microphone: ${event.error || "Unable to listen"}`);
+        setTimeout(() => setVoiceNotice(""), 4000);
+      };
+
+      recognition.onend = () => {
+        setIsRecordingVoice(false);
+        setVoiceNotice("");
+        const promptToRun = finalTranscript.trim() || input.trim();
+        if (promptToRun) {
+          handleSend(promptToRun);
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsRecordingVoice(true);
+      setVoiceNotice("Listening… speak your prompt now (will transcribe & execute)");
+    } catch {
+      setIsRecordingVoice(false);
+      setVoiceNotice("Could not access microphone.");
+      setTimeout(() => setVoiceNotice(""), 4000);
+    }
+  }
 
   return (
     <div className="fade-up mx-auto max-w-[1040px] space-y-6">
@@ -3082,7 +3237,33 @@ function FunctionalAssistantView({
                   }`}
                 >
                   {message.role === "user" ? (
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    <div>
+                      {message.images && message.images.length > 0 && (
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          {message.images.map((imgUrl, i) => (
+                            <img
+                              key={i}
+                              src={imgUrl}
+                              alt="Attached notes or problem"
+                              className="max-h-48 max-w-full rounded-xl border border-white/20 object-cover shadow-sm"
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="mb-2 flex flex-wrap gap-1.5">
+                          {message.attachments.map((fileName, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center gap-1 rounded-md bg-white/20 px-2 py-0.5 text-[10px] font-semibold text-white"
+                            >
+                              <FileText className="size-3" /> {fileName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+                    </div>
                   ) : (
                     <FormattedAssistantMessage content={message.content} />
                   )}
@@ -3155,42 +3336,144 @@ function FunctionalAssistantView({
               </div>
             )}
 
+            {/* Attached items preview strip */}
+            {(attachedImages.length > 0 || attachedFiles.length > 0) && (
+              <div className="mb-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-[#ece7f4] bg-[#fbfaff] p-2">
+                {attachedImages.map((img, i) => (
+                  <div key={`img-${i}`} className="group relative flex items-center gap-1.5 rounded-lg border border-[#e2daf8] bg-white p-1 pr-2 shadow-2xs">
+                    <img src={img.previewUrl} alt={img.name} className="size-8 rounded object-cover" />
+                    <span className="max-w-[120px] truncate text-[11px] font-bold text-[#2e263d]">{img.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedImages((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="ml-1 text-[#8f8899] hover:text-[#d32f2f]"
+                      aria-label="Remove image"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+                {attachedFiles.map((file, i) => (
+                  <div key={`file-${i}`} className="flex items-center gap-1.5 rounded-lg border border-[#e2daf8] bg-white px-2 py-1 shadow-2xs">
+                    <FileText className="size-3.5 text-[#7259e8]" />
+                    <span className="max-w-[140px] truncate text-[11px] font-bold text-[#2e263d]">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="ml-1 text-[#8f8899] hover:text-[#d32f2f]"
+                      aria-label="Remove file"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Voice Notice Strip */}
+            {voiceNotice && (
+              <div className="mb-2.5 flex items-center gap-2 rounded-xl bg-[#f4f0ff] px-3 py-1.5 text-xs font-bold text-[#7259e8] animate-pulse">
+                <Mic className="size-3.5" />
+                <span>{voiceNotice}</span>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                ask();
+                handleSend();
               }}
-              className="flex items-end gap-2 rounded-2xl border border-[#ded8e8] bg-[#faf9fd] p-2 focus-within:border-[#7259e8] focus-within:bg-white"
+              className="flex items-end gap-1.5 sm:gap-2 rounded-2xl border border-[#ded8e8] bg-[#faf9fd] p-2 focus-within:border-[#7259e8] focus-within:bg-white"
             >
+              {/* Focus Button */}
               <button
                 type="button"
                 onClick={() => setShowFocusPicker(true)}
                 aria-label="Choose course or lecture focus"
-                className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-[#eeeaff] text-[#7259e8] transition hover:bg-[#e4dcff]"
+                title="Focus on specific lecture or course"
+                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-[#eeeaff] text-[#7259e8] transition hover:bg-[#e4dcff]"
               >
-                <Plus className="size-5" />
+                <Plus className="size-4.5" />
               </button>
+
+              {/* Attach File Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach documents or images"
+                title="Attach file or picture"
+                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl border border-[#e6e1ee] bg-white text-[#635c71] transition hover:bg-[#f6f4fc] hover:text-[#7259e8]"
+              >
+                <Paperclip className="size-4" />
+              </button>
+
+              {/* Take Picture Camera Button */}
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                aria-label="Take picture with camera"
+                title="Snap photo with camera"
+                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl border border-[#e6e1ee] bg-white text-[#635c71] transition hover:bg-[#f6f4fc] hover:text-[#7259e8]"
+              >
+                <Camera className="size-4" />
+              </button>
+
+              {/* Voice transcribe and execute Button */}
+              <button
+                type="button"
+                onClick={toggleVoice}
+                aria-label={isRecordingVoice ? "Stop voice listening" : "Speak to AI (transcribe and execute)"}
+                title={isRecordingVoice ? "Stop listening" : "Speak prompt (transcribes & executes)"}
+                className={`mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl transition ${
+                  isRecordingVoice
+                    ? "animate-pulse bg-[#ef4444] text-white shadow-md ring-4 ring-[#ef4444]/30"
+                    : "border border-[#e6e1ee] bg-white text-[#635c71] hover:bg-[#f6f4fc] hover:text-[#7259e8]"
+                }`}
+              >
+                {isRecordingVoice ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+              </button>
+
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    ask();
+                    handleSend();
                   }
                 }}
                 rows={1}
-                placeholder="Ask about your coursework…"
+                placeholder={isRecordingVoice ? "Listening... speak now…" : "Ask about your coursework, attach pictures or documents…"}
                 className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-1.5 py-2.5 text-[15px] leading-snug outline-none placeholder:text-[#aaa4b1] sm:text-[14px]"
               />
+
               <button
                 type="submit"
-                disabled={loading || !input.trim()}
-                className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white transition hover:bg-[#6247df] disabled:opacity-40"
+                disabled={loading || (!input.trim() && attachedImages.length === 0 && attachedFiles.length === 0)}
+                className="mb-0.5 grid size-9 sm:size-10 shrink-0 place-items-center rounded-xl bg-[#7259e8] text-white transition hover:bg-[#6247df] disabled:opacity-40"
+                aria-label="Send message"
               >
                 <Send className="size-4" />
               </button>
             </form>
+
+            {/* Hidden file inputs */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv"
+              onChange={handleFilesSelected}
+              className="hidden"
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFilesSelected}
+              className="hidden"
+            />
           </div>
 
           {showFocusPicker && (

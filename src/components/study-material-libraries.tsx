@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Layers3, LoaderCircle, Maximize2, RotateCcw, Sparkles, X } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Clock, Layers3, LoaderCircle, Maximize2, RotateCcw, Sparkles, X } from "lucide-react";
 import type { FlashcardsOutput, QuizOutput } from "@/lib/study-lab-validation";
+import { cleanFlashcardText } from "@/lib/clean-flashcard";
 
 type StudyMaterial = {
   id: string;
@@ -98,7 +99,7 @@ export function GeneratedFlashcardsLibrary({ onOpenStudyLab }: { onOpenStudyLab:
                     </div>
                     <button type="button" onClick={() => setFlipped((value) => !value)} className="flashcard-face mt-5 flex min-h-[210px] w-full flex-col items-center justify-center rounded-[22px] border border-[#e5ddfa] p-6 text-center transition hover:shadow-md">
                       <span className="flashcard-chip rounded-full px-3 py-1 text-[9px] font-black shadow-sm">{flipped ? "ANSWER" : "QUESTION · TAP TO REVEAL"}</span>
-                      <p className="flashcard-text mt-5 text-base font-extrabold leading-7">{flipped ? selected.output.cards[cardIndex].back : selected.output.cards[cardIndex].front}</p>
+                      <p className="flashcard-text mt-5 text-base font-extrabold leading-7">{flipped ? cleanFlashcardText(selected.output.cards[cardIndex].back) : selected.output.cards[cardIndex].front}</p>
                     </button>
                     <div className="mt-4 flex items-center justify-between gap-2">
                       <button type="button" onClick={() => moveCard(-1)} className="flashcard-nav inline-flex h-9 items-center gap-1 rounded-xl border border-[#e9e5ef] px-3 text-[10px] font-bold text-[#3d3650]"><ChevronLeft className="size-4" /> Previous</button>
@@ -131,6 +132,25 @@ export function GeneratedQuizLibrary() {
   const [message, setMessage] = useState("");
   const [requestError, setRequestError] = useState("");
   const [quizFullscreen, setQuizFullscreen] = useState(false);
+  const [quizMode, setQuizMode] = useState<"practice" | "test">("practice");
+  const [testTimeLeftSeconds, setTestTimeLeftSeconds] = useState(600);
+  const [testTimerRunning, setTestTimerRunning] = useState(false);
+
+  useEffect(() => {
+    if (quizMode !== "test" || !testTimerRunning) return;
+    const interval = setInterval(() => {
+      setTestTimeLeftSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setTestTimerRunning(false);
+          void saveAttempt();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [quizMode, testTimerRunning]);
 
   useEffect(() => {
     if (!quizFullscreen) return;
@@ -150,6 +170,7 @@ export function GeneratedQuizLibrary() {
     setMessage("");
     setRequestError("");
     setQuizFullscreen(false);
+    setTestTimerRunning(false);
   }
 
   async function saveAttempt() {
@@ -197,10 +218,56 @@ export function GeneratedQuizLibrary() {
               </label>
               {selected && <div className="mt-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] text-[#85808d]">From {selected.sourceTitle} · {selected.output.questions.length} questions</p>
-                  <button type="button" onClick={() => setQuizFullscreen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2eb] bg-white px-2.5 text-[10px] font-extrabold text-[#534e60] hover:bg-[#faf9fd]">
-                    <Maximize2 className="size-3.5" /> Full screen
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] text-[#85808d]">From {selected.sourceTitle} · {selected.output.questions.length} questions</p>
+                    {/* Mode selector */}
+                    <div className="flex rounded-lg border border-[#e2dcf2] bg-[#f8f6fc] p-0.5 text-[9px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => { setQuizMode("practice"); setTestTimerRunning(false); }}
+                        className={`px-2 py-0.5 rounded-md transition ${quizMode === "practice" ? "bg-[#7259e8] text-white shadow-2xs" : "text-[#625b73]"}`}
+                      >
+                        Practice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuizMode("test");
+                          setTestTimeLeftSeconds(Math.max(5, selected.output.questions.length * 1) * 60);
+                          setTestTimerRunning(true);
+                        }}
+                        className={`px-2 py-0.5 rounded-md transition ${quizMode === "test" ? "bg-[#7259e8] text-white shadow-2xs" : "text-[#625b73]"}`}
+                      >
+                        Timed Test ⏱️
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {quizMode === "test" && (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black tabular-nums ${
+                        testTimeLeftSeconds < 60
+                          ? "bg-[#fff1ef] text-[#dc2626] animate-pulse"
+                          : "bg-[#f5f2ff] text-[#7259e8]"
+                      }`}>
+                        <Clock className="size-3" />
+                        {Math.floor(testTimeLeftSeconds / 60)}:{String(testTimeLeftSeconds % 60).padStart(2, "0")}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (quizMode === "test" && !testTimerRunning) {
+                          setTestTimeLeftSeconds(Math.max(5, selected.output.questions.length * 1) * 60);
+                          setTestTimerRunning(true);
+                        }
+                        setQuizFullscreen(true);
+                      }}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2eb] bg-white px-2.5 text-[10px] font-extrabold text-[#534e60] hover:bg-[#faf9fd]"
+                    >
+                      <Maximize2 className="size-3.5" /> Full screen
+                    </button>
+                  </div>
                 </div>
                 {selected.output.questions.map((question, index) => (
                   <fieldset key={`${selected.id}-${index}`} className="rounded-xl border border-[#ebe7f0] p-3">
@@ -223,13 +290,49 @@ export function GeneratedQuizLibrary() {
         <div className="fixed inset-0 z-[110] flex flex-col bg-white">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#ece8f4] bg-[#faf9fc] px-4 py-3 sm:px-6">
             <div className="min-w-0">
-              <p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">Practice quiz</p>
+              <p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">
+                {quizMode === "test" ? "Timed Test Mode" : "Practice Quiz"}
+              </p>
               <h2 className="truncate text-sm font-black text-[#17132d] sm:text-base">{selected.title}</h2>
               <p className="mt-0.5 truncate text-[10px] text-[#85808d]">From {selected.sourceTitle} · {selected.output.questions.length} questions</p>
             </div>
-            <button type="button" onClick={() => setQuizFullscreen(false)} className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#e6e2eb] bg-white text-[#5f586d] hover:bg-[#f4f1fb]" aria-label="Exit full screen quiz">
-              <X className="size-4" />
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex rounded-lg border border-[#e2dcf2] bg-white p-0.5 text-[9px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => { setQuizMode("practice"); setTestTimerRunning(false); }}
+                  className={`px-2 py-0.5 rounded-md transition ${quizMode === "practice" ? "bg-[#7259e8] text-white shadow-2xs" : "text-[#625b73]"}`}
+                >
+                  Practice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuizMode("test");
+                    setTestTimeLeftSeconds(Math.max(5, selected.output.questions.length * 1) * 60);
+                    setTestTimerRunning(true);
+                  }}
+                  className={`px-2 py-0.5 rounded-md transition ${quizMode === "test" ? "bg-[#7259e8] text-white shadow-2xs" : "text-[#625b73]"}`}
+                >
+                  Timed Test ⏱️
+                </button>
+              </div>
+
+              {quizMode === "test" && (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black tabular-nums ${
+                  testTimeLeftSeconds < 60
+                    ? "bg-[#fff1ef] text-[#dc2626] animate-pulse"
+                    : "bg-[#f5f2ff] text-[#7259e8]"
+                }`}>
+                  <Clock className="size-3.5" />
+                  {Math.floor(testTimeLeftSeconds / 60)}:{String(testTimeLeftSeconds % 60).padStart(2, "0")}
+                </span>
+              )}
+
+              <button type="button" onClick={() => setQuizFullscreen(false)} className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#e6e2eb] bg-white text-[#5f586d] hover:bg-[#f4f1fb]" aria-label="Exit full screen quiz">
+                <X className="size-4" />
+              </button>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
             <div className="mx-auto max-w-2xl space-y-3">
