@@ -5,7 +5,7 @@ import { generateOrganizedNote } from "@/lib/note-generator";
 import { dispatchNotification } from "@/lib/notifications/service";
 
 export const runtime = "nodejs";
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 type RouteContext = { params: Promise<{ id: string }> };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
