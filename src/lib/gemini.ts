@@ -24,22 +24,43 @@ export function hasGeminiKey(): boolean {
 }
 
 export function getGeminiStudyModel(): string {
-  return (
+  const envModel =
     process.env.GEMINI_STUDY_MODEL?.trim() ||
-    process.env.GEMINI_MODEL?.trim() ||
-    "gemini-2.5-flash"
-  );
+    process.env.GEMINI_MODEL?.trim();
+
+  // If env has deprecated or nonexistent models, sanitize to supported production models
+  if (
+    !envModel ||
+    envModel.includes("gemini-1.5") ||
+    envModel.includes("gemini-3.5") ||
+    envModel.includes("gemini-1.0")
+  ) {
+    return "gemini-2.5-flash";
+  }
+
+  return envModel;
 }
 
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-3.5-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
 ];
 
 function isHighDemandOrTemporaryError(status: number, message: string): boolean {
-  if (status === 503 || status === 429 || status === 404) return true;
+  if (status === 503 || status === 429 || status === 404 || status === 400 || status === 500) {
+    if (status === 400) {
+      const lower = message.toLowerCase();
+      return (
+        lower.includes("not found") ||
+        lower.includes("not supported") ||
+        lower.includes("invalid model") ||
+        lower.includes("unknown model")
+      );
+    }
+    return true;
+  }
   const lower = message.toLowerCase();
   return (
     lower.includes("high demand") ||
@@ -47,7 +68,13 @@ function isHighDemandOrTemporaryError(status: number, message: string): boolean 
     lower.includes("temporarily unavailable") ||
     lower.includes("resource has been exhausted") ||
     lower.includes("overloaded") ||
-    lower.includes("rate limit")
+    lower.includes("rate limit") ||
+    lower.includes("quota") ||
+    lower.includes("not found for api version") ||
+    lower.includes("not supported for generatecontent") ||
+    lower.includes("is not found") ||
+    lower.includes("model not found") ||
+    lower.includes("capacity")
   );
 }
 
@@ -63,12 +90,21 @@ export async function geminiChat(
     maxOutputTokens?: number;
     responseMimeType?: string;
     triedModels?: string[];
+    onModelUsed?: (model: string) => void;
   }
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured on the server");
 
-  const model = options?.model ?? getGeminiStudyModel();
+  let model = options?.model ?? getGeminiStudyModel();
+  if (
+    model.includes("gemini-1.5") ||
+    model.includes("gemini-3.5") ||
+    model.includes("gemini-1.0")
+  ) {
+    model = "gemini-2.5-flash";
+  }
+
   const triedModels = new Set(options?.triedModels ?? []);
   triedModels.add(model);
 
@@ -201,6 +237,7 @@ export async function geminiChat(
     throw new Error(`Gemini returned an empty response${candidate?.finishReason ? ` (${candidate.finishReason})` : ""}`);
   }
 
+  options?.onModelUsed?.(model);
   return text;
 }
 
@@ -213,23 +250,30 @@ export async function geminiGenerateJson(
     model?: string;
     temperature?: number;
     maxOutputTokens?: number;
+    triedModels?: string[];
   }
 ) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
-  const model = options?.model ?? getGeminiStudyModel();
+  const requestedModel = options?.model ?? getGeminiStudyModel();
+  let usedModel = requestedModel;
+
   const text = await geminiChat(
     [{ role: "user", content: prompt }],
     {
-      model,
+      model: requestedModel,
       temperature: options?.temperature ?? 0.2,
       maxOutputTokens: options?.maxOutputTokens ?? 8192,
       responseMimeType: "application/json",
+      triedModels: options?.triedModels,
+      onModelUsed: (m) => {
+        usedModel = m;
+      },
     }
   );
 
-  return { text, model };
+  return { text, model: usedModel };
 }
 
 /**
