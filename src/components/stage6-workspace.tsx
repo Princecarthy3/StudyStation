@@ -1159,26 +1159,32 @@ export function LectureStudio({
           {selected.status === "ready" && selected.transcript && (
             <div className="mt-5">
               {/* Studio Tabs Switcher */}
-              <div className="flex items-center justify-between border-b border-[#ece8f4] pb-2">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 border-b border-[#ece8f4] pb-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => setStudioTab("notes")}
-                    className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-black transition ${
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-[11px] font-black transition sm:text-xs ${
                       studioTab === "notes" ? "bg-[#7259e8] text-white shadow-sm" : "text-[#767082] hover:bg-[#f6f4fa]"
                     }`}
                   >
-                    <Sparkles className="size-3.5" /> Generated Notes
-                    {selected.note && <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[8px] font-extrabold">Ready</span>}
+                    <Sparkles className="size-3.5 shrink-0" />
+                    <span>Generated Notes</span>
+                    {selected.note && (
+                      <span className="inline-flex shrink-0 items-center rounded-full bg-white/20 px-1.5 py-0.5 text-[8px] font-extrabold leading-none">
+                        Ready
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={() => setStudioTab("transcript")}
-                    className={`flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-black transition ${
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1.5 text-[11px] font-black transition sm:text-xs ${
                       studioTab === "transcript" ? "bg-[#7259e8] text-white shadow-sm" : "text-[#767082] hover:bg-[#f6f4fa]"
                     }`}
                   >
-                    <FileText className="size-3.5" /> {selected.sourceType === "document" ? "Original File" : "Transcript"}
+                    <FileText className="size-3.5 shrink-0" />
+                    <span>{selected.sourceType === "document" ? "Original File" : "Transcript"}</span>
                   </button>
                 </div>
                 {studioTab === "transcript" && selected.sourceType !== "document" && (

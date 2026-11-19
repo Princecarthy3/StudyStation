@@ -2198,16 +2198,16 @@ function FunctionalNoteModal({
     <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-[#17132d]/60 p-3 backdrop-blur-sm sm:p-5">
       <div className="my-auto max-h-[92vh] w-full max-w-[960px] overflow-hidden rounded-[30px] bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#ece8f2] px-6 py-4.5 bg-white/90 backdrop-blur">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 border-b border-[#ece8f2] bg-white/90 px-3 py-3.5 backdrop-blur sm:px-6 sm:py-4.5">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <span
-              className="rounded-lg px-2.5 py-1 text-[10px] font-black text-white"
+              className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-black text-white sm:px-2.5"
               style={{ backgroundColor: course?.color || "#7259e8" }}
             >
               {course?.code || "NOTE"}
             </span>
-            <div>
-              <h2 className="max-w-[min(100%,22rem)] truncate text-[16px] font-extrabold text-[#17132d] sm:max-w-md">{lecture.title}</h2>
+            <div className="min-w-0">
+              <h2 className="truncate text-[15px] font-extrabold text-[#17132d] sm:text-[16px]">{lecture.title}</h2>
               <p className="mt-0.5 text-[10px] text-[#868093]">
                 {course ? course.title : "Unassigned course"} ·{" "}
                 {new Date(lecture.createdAt).toLocaleDateString("en-US", { timeZone: timezone || "UTC" })}
@@ -2223,79 +2223,83 @@ function FunctionalNoteModal({
           </button>
         </div>
 
-        {/* Modal Tabs */}
+        {/* Modal Tabs + actions — stack on mobile so nothing squishes */}
         {lecture.transcript && (
-          <div className="flex items-center justify-between border-b border-[#ece8f2] px-6 sm:px-8 bg-white">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setModalTab("notes")}
-                className={`flex items-center gap-2 border-b-2 py-3 text-xs font-black transition ${
-                  modalTab === "notes"
-                    ? "border-[#7259e8] text-[#7259e8]"
-                    : "border-transparent text-[#7a7486] hover:text-[#17132d]"
-                }`}
-              >
-                <Sparkles className="size-3.5" />
-                Generated Notes
-                {note && (
-                  <span className="rounded-full bg-[#10b981]/15 px-2 py-0.5 text-[9px] font-black text-[#047857]">
-                    Ready
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setModalTab("transcript")}
-                className={`flex items-center gap-2 border-b-2 py-3 text-xs font-black transition ${
-                  modalTab === "transcript"
-                    ? "border-[#7259e8] text-[#7259e8]"
-                    : "border-transparent text-[#7a7486] hover:text-[#17132d]"
-                }`}
-              >
-                <FileText className="size-3.5" />
-                {lecture.sourceType === "document" ? "Original File" : "Transcript"}
-              </button>
-            </div>
-            {note && (
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="border-b border-[#ece8f2] bg-white px-3 sm:px-6">
+            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <div className="flex min-w-0 items-stretch gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button
                   type="button"
-                  onClick={() => setNotesFullscreen(true)}
-                  className="flex items-center gap-1 rounded-lg border border-[#e5e1eb] bg-white px-2 sm:px-2.5 py-1 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
-                  title="Full screen notes preview"
+                  onClick={() => setModalTab("notes")}
+                  className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2.5 text-[11px] font-black transition sm:text-xs ${
+                    modalTab === "notes"
+                      ? "border-[#7259e8] text-[#7259e8]"
+                      : "border-transparent text-[#7a7486] hover:text-[#17132d]"
+                  }`}
                 >
-                  <Maximize2 className="size-3" />
-                  <span>Full screen</span>
+                  <Sparkles className="size-3.5 shrink-0" />
+                  <span>Generated Notes</span>
+                  {note && (
+                    <span className="inline-flex shrink-0 items-center rounded-full bg-[#10b981]/15 px-1.5 py-0.5 text-[9px] font-black leading-none text-[#047857]">
+                      Ready
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={exportNotePdf}
-                  className="flex items-center gap-1 rounded-lg border border-[#cfc4f6] bg-[#f5f2ff] px-2 sm:px-2.5 py-1 text-[10px] font-black text-[#7259e8] shadow-sm hover:bg-[#eae3fc]"
-                  title="Export PDF"
+                  onClick={() => setModalTab("transcript")}
+                  className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2.5 text-[11px] font-black transition sm:text-xs ${
+                    modalTab === "transcript"
+                      ? "border-[#7259e8] text-[#7259e8]"
+                      : "border-transparent text-[#7a7486] hover:text-[#17132d]"
+                  }`}
                 >
-                  <FileDown className="size-3" />
-                  <span>Export PDF</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={copyNoteMarkdown}
-                  className="flex items-center gap-1 rounded-lg border border-[#e5e1eb] bg-white px-2 sm:px-2.5 py-1 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
-                  title="Copy Markdown"
-                >
-                  {copiedNote ? <Check className="size-3 text-[#10b981]" /> : <Copy className="size-3" />}
-                  <span className="hidden xs:inline">{copiedNote ? "Copied" : "Copy Markdown"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={generateNotes}
-                  disabled={generating}
-                  className="flex items-center gap-1 rounded-lg bg-[#f3eeff] px-2 sm:px-2.5 py-1 text-[10px] font-extrabold text-[#7259e8] hover:bg-[#eae3fc] disabled:opacity-50"
-                  title="Regenerate Notes"
-                >
-                  <RefreshCw className={`size-3 ${generating ? "animate-spin" : ""}`} />
-                  <span className="hidden sm:inline">{generating ? "Updating..." : "Regenerate"}</span>
+                  <FileText className="size-3.5 shrink-0" />
+                  <span>{lecture.sourceType === "document" ? "Original File" : "Transcript"}</span>
                 </button>
               </div>
-            )}
+              {note && (
+                <div className="flex flex-wrap items-center gap-1.5 pb-2 sm:pb-0">
+                  <button
+                    type="button"
+                    onClick={() => setNotesFullscreen(true)}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#e5e1eb] bg-white px-2.5 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
+                    title="Full screen notes preview"
+                  >
+                    <Maximize2 className="size-3 shrink-0" />
+                    <span>Full screen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportNotePdf}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#cfc4f6] bg-[#f5f2ff] px-2.5 text-[10px] font-black text-[#7259e8] shadow-sm hover:bg-[#eae3fc]"
+                    title="Export PDF"
+                  >
+                    <FileDown className="size-3 shrink-0" />
+                    <span>Export PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyNoteMarkdown}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#e5e1eb] bg-white px-2.5 text-[10px] font-extrabold text-[#534e60] shadow-sm hover:bg-[#faf9fe]"
+                    title="Copy Markdown"
+                  >
+                    {copiedNote ? <Check className="size-3 text-[#10b981]" /> : <Copy className="size-3 shrink-0" />}
+                    <span className="hidden sm:inline">{copiedNote ? "Copied" : "Copy"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={generateNotes}
+                    disabled={generating}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg bg-[#f3eeff] px-2.5 text-[10px] font-extrabold text-[#7259e8] hover:bg-[#eae3fc] disabled:opacity-50"
+                    title="Regenerate Notes"
+                  >
+                    <RefreshCw className={`size-3 shrink-0 ${generating ? "animate-spin" : ""}`} />
+                    <span className="hidden sm:inline">{generating ? "Updating..." : "Regenerate"}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
