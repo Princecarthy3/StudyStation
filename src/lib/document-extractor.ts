@@ -1,6 +1,7 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
 
 export type ExtractedDocument = {
   text: string;
@@ -67,15 +68,52 @@ async function extractDocxText(buffer: Buffer): Promise<{ text: string }> {
  * Extracts text from an uploaded PowerPoint presentation (.pptx)
  * by inspecting slide XML entries in the OpenXML package.
  */
-function extractPptxText(buffer: Buffer): { text: string; slideCount: number } {
+async function extractPptxText(buffer: Buffer): Promise<{ text: string; slideCount: number }> {
   try {
+    const zip = await JSZip.loadAsync(buffer);
+    const slideEntries = Object.keys(zip.files)
+      .map((name) => {
+        const match = name.match(/^ppt\/slides\/slide(\d+)\.xml$/i);
+        return match ? { name, num: Number.parseInt(match[1], 10) } : null;
+      })
+      .filter((entry): entry is { name: string; num: number } => Boolean(entry))
+      .sort((a, b) => a.num - b.num);
+
+    if (slideEntries.length > 0) {
+      const slides: string[] = [];
+      for (const slide of slideEntries) {
+        const xml = await zip.file(slide.name)?.async("text");
+        if (!xml) continue;
+        const textParts = Array.from(xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/gi))
+          .map((match) => match[1]
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, '"')
+            .replace(/&apos;/g, "'")
+            .trim())
+          .filter(Boolean);
+        if (textParts.length > 0) {
+          slides.push(`--- Slide ${slide.num} ---\n${textParts.join(" ")}`);
+        }
+      }
+      if (slides.length > 0) {
+        return { text: slides.join("\n\n").trim(), slideCount: slideEntries.length };
+      }
+    }
+  } catch {
+    // Fall through to legacy CFB extraction for older binary PowerPoint files.
+  }
+
+  try {
+    // Legacy .ppt and malformed presentations may still be readable through CFB.
     const cfb = XLSX.CFB.read(buffer, { type: "buffer" });
     if (!cfb || !cfb.FileIndex) {
       throw new Error("Invalid presentation format");
     }
 
     // Find all slide files: ppt/slides/slide1.xml, slide2.xml, etc.
-    const slideEntries: { name: string; num: number; content: string }[] = [];
+    const legacySlideEntries: { name: string; num: number; content: string }[] = [];
 
     for (const file of cfb.FileIndex) {
       const name = file.name || "";
@@ -86,16 +124,16 @@ function extractPptxText(buffer: Buffer): { text: string; slideCount: number } {
         if (file.content) {
           rawContent = Buffer.from(file.content).toString("utf8");
         }
-        slideEntries.push({ name, num, content: rawContent });
+        legacySlideEntries.push({ name, num, content: rawContent });
       }
     }
 
     // Sort slides in presentation order
-    slideEntries.sort((a, b) => a.num - b.num);
+    legacySlideEntries.sort((a, b) => a.num - b.num);
 
     const slides: string[] = [];
 
-    for (const slide of slideEntries) {
+    for (const slide of legacySlideEntries) {
       // Extract text content inside <a:t>...</a:t> XML tags
       const textMatches = slide.content.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/gi);
       const textParts: string[] = [];
@@ -139,7 +177,7 @@ function extractPptxText(buffer: Buffer): { text: string; slideCount: number } {
 
     return {
       text: allXmlText.join(" ").trim(),
-      slideCount: slideEntries.length || 1,
+      slideCount: legacySlideEntries.length || 1,
     };
   } catch (err) {
     throw new Error(`PowerPoint file could not be read: ${err instanceof Error ? err.message : String(err)}`);
@@ -184,7 +222,7 @@ export async function extractDocumentText(
     text = res.text;
   } else if (ext === "pptx" || ext === "ppt" || mimeType?.includes("presentationml") || mimeType?.includes("powerpoint")) {
     format = ext === "ppt" ? "ppt" : "pptx";
-    const res = extractPptxText(buffer);
+    const res = await extractPptxText(buffer);
     text = res.text;
     pageCount = res.slideCount;
   } else if (["txt", "text", "md", "markdown", "rtf"].includes(ext) || mimeType?.startsWith("text/")) {

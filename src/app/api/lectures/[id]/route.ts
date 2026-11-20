@@ -122,6 +122,21 @@ export async function DELETE(_request: Request, context: RouteContext) {
   } catch {
     return NextResponse.json({ error: "Lecture deletion is not configured on the server." }, { status: 503 });
   }
+
+  const { error: derivedError } = await admin
+    .from("ai_generations")
+    .delete()
+    .eq("lecture_id", result.lecture.id)
+    .eq("owner_id", result.user.id);
+  if (derivedError) {
+    return NextResponse.json({ error: "The lecture's generated study materials could not be removed." }, { status: 500 });
+  }
+
+  await Promise.all([
+    admin.from("flashcards").delete().eq("lecture_id", result.lecture.id).eq("owner_id", result.user.id),
+    admin.from("quizzes").delete().eq("lecture_id", result.lecture.id).eq("owner_id", result.user.id),
+  ]);
+
   const { data, error } = await admin
     .from("lectures")
     .delete()

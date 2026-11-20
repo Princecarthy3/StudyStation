@@ -156,3 +156,46 @@ export async function POST(request: Request, context: RouteContext) {
     message: "Organized study notes generated successfully.",
   }, { status: 201 });
 }
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  if (!uuidPattern.test(id)) {
+    return NextResponse.json({ error: "Invalid lecture ID." }, { status: 400 });
+  }
+
+  let supabase;
+  try {
+    supabase = await createClient();
+  } catch {
+    return NextResponse.json({ error: "Database service unavailable." }, { status: 503 });
+  }
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return NextResponse.json({ error: "Sign in to delete notes." }, { status: 401 });
+  }
+
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return NextResponse.json({ error: "Server admin client unavailable." }, { status: 503 });
+  }
+
+  const { data, error } = await admin
+    .from("notes")
+    .delete()
+    .eq("lecture_id", id)
+    .eq("user_id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ error: "The notes could not be deleted." }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: "Notes not found or already deleted." }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
+}

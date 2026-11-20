@@ -3,12 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGeminiStudyModel, geminiGenerateJson, hasGeminiKey } from "@/lib/gemini";
 import { parseJsonObject } from "@/lib/openrouter";
+import { hasOpenRouterKey, openRouterChat } from "@/lib/openrouter";
 import { normalizeQuizOutput, validateStudyOutput, type StudyLabAction, type StudyLabOutput } from "@/lib/study-lab-validation";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const sourceLimit = 250_000;
+const sourceLimit = 900_000;
 const hourlyGenerationLimit = 20;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const actions: StudyLabAction[] = ["summary", "explain", "ask", "flashcards", "quiz", "simplify"];
@@ -206,7 +207,9 @@ export async function POST(request: Request) {
   if ((action === "ask" || action === "explain" || action === "simplify") && (question.length < 2 || question.length > 2000)) {
     return badRequest("Enter a concept or question between 2 and 2,000 characters.");
   }
-  if (!hasGeminiKey()) return badRequest("Gemini is not configured. Add GEMINI_API_KEY from Google AI Studio to the server environment.", 503);
+  if (!hasGeminiKey() && !hasOpenRouterKey()) {
+    return badRequest("No AI provider is configured. Add GEMINI_API_KEY or OPENROUTER_API_KEY to the server environment.", 503);
+  }
 
   let admin;
   try {
@@ -266,25 +269,50 @@ export async function POST(request: Request) {
     return badRequest("The study request could not be saved. Check that the Stage 4 migration is applied.", 500);
   }
 
-  let raw: string;
-  let usedModel: string;
+  let raw: string = "";
+  let usedModel: string = model;
   try {
-    const generated = await geminiGenerateJson([
-      "You are StudyStation, an expert university study tutor. Use both your subject knowledge and lecture context. Always explain concepts directly and deeply with concrete academic substance. Never write superficial meta-descriptions of slides or pages (e.g. never say 'Slide X describes Y' or 'The document covers'). Return only valid JSON.",
-      createPrompt(action, lecture.title, sourceText, {
-        instructions,
-        difficulty,
-        questionType,
-        count: Number.isInteger(count) ? count as number : 8,
-        question,
-      }),
-    ].join("\n\n"), {
-      model,
-      temperature: 0.2,
-      maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 8192,
-    });
-    raw = generated.text;
-    usedModel = generated.model;
+    if (hasGeminiKey()) {
+      try {
+        const generated = await geminiGenerateJson([
+          "You are StudyStation, an expert university study tutor. Use both your subject knowledge and lecture context. Always explain concepts directly and deeply with concrete academic substance. Never write superficial meta-descriptions of slides or pages (e.g. never say 'Slide X describes Y' or 'The document covers'). Return only valid JSON.",
+          createPrompt(action, lecture.title, sourceText, {
+            instructions,
+            difficulty,
+            questionType,
+            count: Number.isInteger(count) ? count as number : 8,
+            question,
+          }),
+        ].join("\n\n"), {
+          model,
+          temperature: 0.2,
+          maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 16384,
+        });
+        raw = generated.text;
+        usedModel = generated.model;
+      } catch (geminiError) {
+        if (!hasOpenRouterKey()) throw geminiError;
+        console.warn("Gemini study generation failed; trying OpenRouter", geminiError instanceof Error ? geminiError.message : geminiError);
+      }
+    }
+    if (!raw && hasOpenRouterKey()) {
+      const openRouterModel = process.env.OPENROUTER_STUDY_MODEL ?? process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash";
+      raw = await openRouterChat(
+        [
+          { role: "system", content: "You are StudyStation, an expert university study tutor. Ground every answer in the supplied source and return only valid JSON." },
+          { role: "user", content: createPrompt(action, lecture.title, sourceText, {
+            instructions,
+            difficulty,
+            questionType,
+            count: Number.isInteger(count) ? count as number : 8,
+            question,
+          }) },
+        ],
+        { model: openRouterModel, temperature: 0.2, maxTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 16384 }
+      );
+      usedModel = openRouterModel;
+    }
+    if (!raw.trim()) throw new Error("The AI provider returned an empty response.");
   } catch (error) {
     const { error: updateError } = await admin.from("ai_generations")
       .update({ status: "failed", error_code: "provider_error", updated_at: new Date().toISOString() })
@@ -311,7 +339,7 @@ export async function POST(request: Request) {
   }
   if (!validateStudyOutput(action, output) && action === "quiz") {
     try {
-      const repairCount = Math.min(count, 12);
+      const repairCount = count;
       const repaired = await geminiGenerateJson([
         "Return only valid JSON for a practice quiz. No markdown.",
         `Create exactly ${repairCount} practice questions in format "${questionType}" at ${difficulty} difficulty from this source.`,

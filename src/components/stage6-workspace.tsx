@@ -880,6 +880,29 @@ export function LectureStudio({
     }
   }
 
+  async function deleteGeneratedNote() {
+    if (!selected?.note) return;
+    if (!window.confirm(`Delete the generated notes for "${selected.title}"? The original lecture and transcript will remain.`)) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/lectures/${selected.id}/notes`, { method: "DELETE" });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "The generated notes could not be deleted.");
+      setSelected({ ...selected, note: null });
+      setNotice("Generated notes deleted.");
+      onToast?.("Generated notes deleted.", "success");
+      router.refresh();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "The generated notes could not be deleted.";
+      setError(message);
+      onToast?.(message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function retryLecture(id: string) {
     setBusy(true);
     setError("");
@@ -1075,6 +1098,7 @@ export function LectureStudio({
                       <button type="button" onClick={exportNotePdfAction} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#cfc4f6] bg-[#f5f2ff] px-2.5 text-[11px] font-extrabold text-[#7259e8] hover:bg-[#ece7ff] shadow-sm"><FileDown className="size-3.5" /> Export PDF</button>
                       <button type="button" onClick={copyNoteMarkdownAction} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2eb] px-2.5 text-[11px] font-bold hover:bg-[#faf9fd]"><Clipboard className="size-3.5" /> Copy Notes</button>
                       <button type="button" onClick={downloadNoteMarkdownAction} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2eb] px-2.5 text-[11px] font-bold hover:bg-[#faf9fd]"><Download className="size-3.5" /> Download .md</button>
+                      <button type="button" disabled={busy} onClick={() => void deleteGeneratedNote()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#efdedc] px-2.5 text-[11px] font-bold text-[#a44e48] hover:bg-[#fff5f4] disabled:opacity-50"><Trash2 className="size-3.5" /> Delete Notes</button>
                       <button type="button" disabled={generatingNotes} onClick={() => void generateNotes()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e6e2eb] px-2.5 text-[11px] font-bold hover:bg-[#faf9fd] disabled:opacity-50">
                         {generatingNotes ? <LoaderCircle className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Regenerate Notes
                       </button>

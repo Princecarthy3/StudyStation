@@ -188,7 +188,7 @@ export async function POST(request: Request) {
       const extracted = await extractDocumentText(bytes, lecture.storage_path, lecture.mime_type);
       const cleanTranscript = extracted.text;
       if (!cleanTranscript) throw new Error("No readable text could be extracted from this document.");
-      if (cleanTranscript.length > 1_000_000) throw new Error("The document is larger than the supported limit.");
+      if (cleanTranscript.length > 3_000_000) throw new Error("The document is larger than the supported limit.");
 
       const { error: saveDocError } = await admin
         .from("lectures")
