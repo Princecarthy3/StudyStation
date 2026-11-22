@@ -37,7 +37,7 @@ export function getGeminiStudyModel(): string {
     !envModel ||
     envModel.includes("gemini-1.5") ||
     envModel.includes("gemini-1.0") ||
-    envModel.includes("gemini-2.0-flash-lite")
+    envModel.includes("gemini-2.0")
   ) {
     return "gemini-2.5-flash";
   }
@@ -48,8 +48,8 @@ export function getGeminiStudyModel(): string {
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
+  "gemini-3.8-flash",
   "gemini-3.5-flash-lite",
-  "gemini-2.0-flash",
 ];
 
 function isHighDemandOrTemporaryError(status: number, message: string): boolean {
@@ -110,7 +110,7 @@ export async function geminiChat(
   if (
     model.includes("gemini-1.5") ||
     model.includes("gemini-1.0") ||
-    model.includes("gemini-2.0-flash-lite")
+    model.includes("gemini-2.0")
   ) {
     model = "gemini-2.5-flash";
   }

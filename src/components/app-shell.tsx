@@ -3051,16 +3051,17 @@ function FunctionalAssistantView({
       recognition.onend = () => {
         setIsRecordingVoice(false);
         setVoiceNotice("");
-        const promptToRun = finalTranscript.trim() || input.trim();
-        if (promptToRun) {
-          handleSend(promptToRun);
+        const promptText = (finalTranscript || input).trim();
+        if (promptText) {
+          setInput(promptText);
+          inputRef.current?.focus();
         }
       };
 
       recognitionRef.current = recognition;
       recognition.start();
       setIsRecordingVoice(true);
-      setVoiceNotice("Listening… speak your prompt now (will transcribe & execute)");
+      setVoiceNotice("Listening… speak your prompt now (will transcribe into input)");
     } catch {
       setIsRecordingVoice(false);
       setVoiceNotice("Could not access microphone.");

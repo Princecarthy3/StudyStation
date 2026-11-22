@@ -99,7 +99,7 @@ async function transcribeWithGemini(input: {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
-  const model = process.env.GEMINI_TRANSCRIPTION_MODEL?.trim() || "gemini-2.0-flash";
+  const model = process.env.GEMINI_TRANSCRIPTION_MODEL?.trim() || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const prompt = `You are an expert lecture transcription assistant for university students. Accurately transcribe the supplied audio recording word-for-word. Format the transcript into clear, readable paragraphs. Preserve technical and academic terms accurately. Return strictly valid JSON with one key, transcript, containing the transcription text as a string. Do not add commentary or text outside the JSON object. Lecture title: "${input.title}"${input.courseTitle ? ` Course: "${input.courseTitle}"` : ""}`;
