@@ -202,6 +202,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ answer: demoAnswer, demo: true });
   } catch (error) {
     console.error("AI route error", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "The AI request failed." }, { status: 500 });
+    let message = error instanceof Error ? error.message : "The AI request failed.";
+    if (message.includes("requires more credits") || message.includes("openrouter.ai/settings/credits")) {
+      message = "Your OpenRouter account has run out of credits. Please add credits at https://openrouter.ai/settings/credits, or configure a free Google Gemini API key in your environment variables (100% free at https://aistudio.google.com/app/apikey).";
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

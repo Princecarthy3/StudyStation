@@ -319,12 +319,15 @@ export async function POST(request: Request) {
       .eq("id", generationId)
       .eq("owner_id", user.id);
     if (updateError) console.error("Study generation failure state could not be saved", { code: updateError.code });
-    console.error("Gemini study generation failed", {
+    console.error("AI study generation failed", {
       model,
-      message: error instanceof Error ? error.message.slice(0, 400) : "Unknown Gemini error",
+      message: error instanceof Error ? error.message.slice(0, 400) : "Unknown AI error",
     });
-    const detail = error instanceof Error ? error.message.slice(0, 240) : "Unknown Gemini error.";
-    return badRequest(`Gemini could not complete this request. ${detail}`, 502);
+    let detail = error instanceof Error ? error.message.slice(0, 300) : "Unknown AI error.";
+    if (detail.includes("requires more credits") || detail.includes("openrouter.ai/settings/credits")) {
+      detail = "Your OpenRouter account has run out of credits. Please add credits at https://openrouter.ai/settings/credits, or configure a free Google Gemini API key in your environment variables (100% free at https://aistudio.google.com/app/apikey).";
+    }
+    return badRequest(`The AI service could not complete this request. ${detail}`, 502);
   }
 
   let output: unknown;

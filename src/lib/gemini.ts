@@ -32,12 +32,12 @@ export function getGeminiStudyModel(): string {
     process.env.GEMINI_STUDY_MODEL?.trim() ||
     process.env.GEMINI_MODEL?.trim();
 
-  // If env has deprecated or nonexistent models, sanitize to supported production models
+  // If env has deprecated or removed models, sanitize to supported production models
   if (
     !envModel ||
     envModel.includes("gemini-1.5") ||
-    envModel.includes("gemini-3.5") ||
-    envModel.includes("gemini-1.0")
+    envModel.includes("gemini-1.0") ||
+    envModel.includes("gemini-2.0-flash-lite")
   ) {
     return "gemini-2.5-flash";
   }
@@ -48,17 +48,20 @@ export function getGeminiStudyModel(): string {
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
   "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
 ];
 
 function isHighDemandOrTemporaryError(status: number, message: string): boolean {
-  if (status === 503 || status === 429 || status === 404 || status === 400 || status === 500) {
-    if (status === 400) {
+  if (status === 503 || status === 429 || status === 404 || status === 400 || status === 410 || status === 500) {
+    if (status === 400 || status === 410) {
       const lower = message.toLowerCase();
       return (
         lower.includes("not found") ||
         lower.includes("not supported") ||
+        lower.includes("no longer available") ||
+        lower.includes("not available") ||
+        lower.includes("deprecated") ||
         lower.includes("invalid model") ||
         lower.includes("unknown model")
       );
@@ -76,6 +79,9 @@ function isHighDemandOrTemporaryError(status: number, message: string): boolean 
     lower.includes("quota") ||
     lower.includes("not found for api version") ||
     lower.includes("not supported for generatecontent") ||
+    lower.includes("no longer available") ||
+    lower.includes("not available") ||
+    lower.includes("deprecated") ||
     lower.includes("is not found") ||
     lower.includes("model not found") ||
     lower.includes("capacity")
@@ -103,8 +109,8 @@ export async function geminiChat(
   let model = options?.model ?? getGeminiStudyModel();
   if (
     model.includes("gemini-1.5") ||
-    model.includes("gemini-3.5") ||
-    model.includes("gemini-1.0")
+    model.includes("gemini-1.0") ||
+    model.includes("gemini-2.0-flash-lite")
   ) {
     model = "gemini-2.5-flash";
   }
