@@ -65,6 +65,7 @@ import {
   Star,
   Target,
   TimerReset,
+  Trash2,
   Moon,
   Upload,
   Sun,
@@ -1292,6 +1293,29 @@ export function AppShell({
     setModal("note");
   }
 
+  async function handleDeleteLecture(lecture: Stage6Lecture) {
+    if (!window.confirm(`Delete "${lecture.title}" and its notes? This action cannot be undone.`)) return;
+    try {
+      const response = await fetch(`/api/lectures/${lecture.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Failed to delete lecture.");
+      }
+      setLiveDashboard((prev) => ({
+        ...prev,
+        lectures: prev.lectures.filter((l) => l.id !== lecture.id),
+      }));
+      if (activeLectureNote?.id === lecture.id) {
+        setModal(null);
+        setActiveLectureNote(null);
+      }
+      showToast("Lecture notes deleted.", "success");
+      router.refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to delete lecture.", "error");
+    }
+  }
+
   useEffect(() => {
     if (autoOpenLectureId) {
       const target = liveDashboard.lectures.find((l) => l.id === autoOpenLectureId);
@@ -1615,6 +1639,7 @@ export function AppShell({
               onNote={openNote}
               onCapture={() => setModal("capture")}
               onOpenStudyLab={() => navigate("study-lab")}
+              onDelete={handleDeleteLecture}
             />
           )}
 
@@ -1780,6 +1805,7 @@ export function AppShell({
             setModal(null);
             navigate("study-lab");
           }}
+          onDeleteLecture={handleDeleteLecture}
           onAskAssistant={() => {
             setModal(null);
             setSelectedChatLectureId(activeLectureNote.id);
@@ -1857,6 +1883,7 @@ function FunctionalNotesView({
   onNote,
   onCapture,
   onOpenStudyLab,
+  onDelete,
 }: {
   lectures: Stage6Lecture[];
   courses: Stage6Course[];
@@ -1865,6 +1892,7 @@ function FunctionalNotesView({
   onNote: (lecture: Stage6Lecture) => void;
   onCapture: () => void;
   onOpenStudyLab: () => void;
+  onDelete?: (lecture: Stage6Lecture) => void;
 }) {
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>("all");
@@ -1995,10 +2023,18 @@ function FunctionalNotesView({
                   : "Recording";
 
             return (
-              <button
+              <div
                 key={lecture.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onNote(lecture)}
-                className={`group rounded-[24px] border border-[#e8e4f1] bg-white p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-[#cfc5f3] hover:shadow-[0_12px_30px_rgba(43,32,77,0.06)] ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onNote(lecture);
+                  }
+                }}
+                className={`group cursor-pointer rounded-[24px] border border-[#e8e4f1] bg-white p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-[#cfc5f3] hover:shadow-[0_12px_30px_rgba(43,32,77,0.06)] ${
                   layout === "list" ? "sm:flex sm:items-center sm:gap-5" : ""
                 }`}
               >
@@ -2014,11 +2050,6 @@ function FunctionalNotesView({
                     <span className="rounded-full bg-[#f3f0f7] px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#6b6577]">
                       {sourceLabel}
                     </span>
-                    {lecture.note && (
-                      <span className="rounded-full bg-[#f3eeff] px-2 py-0.5 text-[9px] font-black text-[#7259e8]">
-                        ✨ Notes ready
-                      </span>
-                    )}
                     <span
                       className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${
                         lecture.status === "ready"
@@ -2032,6 +2063,20 @@ function FunctionalNotesView({
                     >
                       {lecture.status}
                     </span>
+                    {onDelete && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(lecture);
+                        }}
+                        className="grid size-6 place-items-center rounded-lg text-[#9e98a8] hover:bg-[#fee2e2] hover:text-[#dc2626] transition"
+                        title="Delete lecture and notes"
+                        aria-label={`Delete ${lecture.title}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2071,7 +2116,7 @@ function FunctionalNotesView({
                     </span>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -2091,6 +2136,7 @@ function FunctionalNoteModal({
   onStudyLab,
   onAskAssistant,
   onNoteUpdated,
+  onDeleteLecture,
 }: {
   lecture: Stage6Lecture;
   course?: Stage6Course;
@@ -2099,6 +2145,7 @@ function FunctionalNoteModal({
   onStudyLab: () => void;
   onAskAssistant: () => void;
   onNoteUpdated?: (note: OrganizedNoteData) => void;
+  onDeleteLecture?: (lecture: Stage6Lecture) => void;
 }) {
   const router = useRouter();
   const [note, setNote] = useState<OrganizedNoteData | null>(lecture.note ?? null);
@@ -2214,13 +2261,26 @@ function FunctionalNoteModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={close}
-            className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7] hover:bg-[#eae6f0]"
-            aria-label="Close note"
-          >
-            <X className="size-4 text-[#443e52]" />
-          </button>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {onDeleteLecture && (
+              <button
+                type="button"
+                onClick={() => onDeleteLecture(lecture)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-2.5 text-[11px] font-bold text-[#dc2626] transition hover:bg-[#fee2e2] sm:px-3"
+                title="Delete this lecture and notes"
+              >
+                <Trash2 className="size-3.5" />
+                <span className="hidden sm:inline">Delete</span>
+              </button>
+            )}
+            <button
+              onClick={close}
+              className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7] hover:bg-[#eae6f0]"
+              aria-label="Close note"
+            >
+              <X className="size-4 text-[#443e52]" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Tabs + actions — stack on mobile so nothing squishes */}
