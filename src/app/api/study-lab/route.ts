@@ -328,9 +328,13 @@ export async function POST(request: Request) {
     });
     let detail = error instanceof Error ? error.message.slice(0, 300) : "Unknown AI error.";
     if (detail.includes("requires more credits") || detail.includes("openrouter.ai/settings/credits")) {
-      detail = lastGeminiError
-        ? `Primary Gemini generation encountered an error (${lastGeminiError.slice(0, 150)}) and fallback OpenRouter account has no credits.`
-        : "Your OpenRouter account has run out of credits. Please add credits at https://openrouter.ai/settings/credits, or configure a free Google Gemini API key in your environment variables (100% free at https://aistudio.google.com/app/apikey).";
+      if (lastGeminiError?.toLowerCase().includes("high demand") || lastGeminiError?.toLowerCase().includes("spikes in demand")) {
+        detail = "Google Gemini is currently experiencing a temporary high-demand spike. Please wait a few moments and try again. You do not need to buy OpenRouter credits.";
+      } else {
+        detail = lastGeminiError
+          ? `Google Gemini encountered an issue (${lastGeminiError.slice(0, 150)}). If this persists, verify your GEMINI_API_KEY in your environment variables.`
+          : "Your OpenRouter account has run out of credits. Please add credits at https://openrouter.ai/settings/credits, or configure a free Google Gemini API key in your environment variables (100% free at https://aistudio.google.com/app/apikey).";
+      }
     }
     return badRequest(`The AI service could not complete this request. ${detail}`, 502);
   }

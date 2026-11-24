@@ -48,8 +48,7 @@ export function getGeminiStudyModel(): string {
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-3.5-flash-lite",
+  "gemini-2.5-pro",
 ];
 
 function isHighDemandOrTemporaryError(status: number, message: string): boolean {
@@ -210,11 +209,24 @@ export async function geminiChat(
   if (!response.ok || !data) {
     // If the model is experiencing high demand (503), quota (429), or 404, fallback to next healthy model
     if (isHighDemandOrTemporaryError(response.status, errorMessage)) {
+      // 1. If 503 temporary spike, retry once after 1.5s on same model before switching
+      const retryKey = `${model}:retry`;
+      if (response.status === 503 && !triedModels.has(retryKey)) {
+        triedModels.add(retryKey);
+        console.warn(`[Gemini] Model ${model} is experiencing temporary high demand (503). Retrying in 1.5s...`);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return geminiChat(messages, {
+          ...options,
+          model,
+          triedModels: Array.from(triedModels),
+        });
+      }
+
+      // 2. Fall back to next model
       const nextModel = FALLBACK_MODELS.find((m) => !triedModels.has(m));
       if (nextModel) {
         console.warn(`[Gemini] Model ${model} is experiencing high demand (${errorMessage}). Falling back to ${nextModel}...`);
-        // Brief 800ms backoff before switching
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         return geminiChat(messages, {
           ...options,
           model: nextModel,
