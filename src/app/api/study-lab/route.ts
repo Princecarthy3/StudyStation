@@ -182,7 +182,7 @@ export async function POST(request: Request) {
   const difficultyRaw = typeof body.difficulty === "string" ? body.difficulty : "standard";
   const question = typeof body.question === "string" ? body.question.trim() : "";
   const rawCount = body.count === undefined || body.count === null ? 8 : Number(body.count);
-  const maxAllowedCount = action === "quiz" ? 100 : 20;
+  const maxAllowedCount = action === "quiz" ? 50 : 20;
   const count = Number.isFinite(rawCount) ? Math.min(maxAllowedCount, Math.max(3, Math.round(rawCount))) : 8;
   if (instructions.length > 1000) return badRequest("Keep extra instructions under 1,000 characters.");
   const difficulty = (() => {
@@ -198,8 +198,8 @@ export async function POST(request: Request) {
     if (["mixed", "all", "any", "combination"].includes(rawQuestionType)) return "mixed";
     return "multiple_choice";
   })();
-  if (action === "quiz" && (count < 3 || count > 100)) {
-    return badRequest("Choose between 3 and 100 quiz questions.");
+  if (action === "quiz" && (count < 3 || count > 50)) {
+    return badRequest("Choose between 3 and 50 quiz questions.");
   }
   if (action === "flashcards" && (count < 3 || count > 20)) {
     return badRequest("Choose between 3 and 20 flashcards.");
@@ -271,6 +271,7 @@ export async function POST(request: Request) {
 
   let raw: string = "";
   let usedModel: string = model;
+  let lastGeminiError: string | null = null;
   try {
     if (hasGeminiKey()) {
       try {
@@ -286,13 +287,14 @@ export async function POST(request: Request) {
         ].join("\n\n"), {
           model,
           temperature: 0.2,
-          maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 16384,
+          maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(24000, count * 350)) : 16384,
         });
         raw = generated.text;
         usedModel = generated.model;
       } catch (geminiError) {
+        lastGeminiError = geminiError instanceof Error ? geminiError.message : String(geminiError);
         if (!hasOpenRouterKey()) throw geminiError;
-        console.warn("Gemini study generation failed; trying OpenRouter", geminiError instanceof Error ? geminiError.message : geminiError);
+        console.warn("Gemini study generation failed; trying OpenRouter", lastGeminiError);
       }
     }
     if (!raw && hasOpenRouterKey()) {
@@ -308,11 +310,11 @@ export async function POST(request: Request) {
             question,
           }) },
         ],
-        { model: openRouterModel, temperature: 0.2, maxTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 16384 }
+        { model: openRouterModel, temperature: 0.2, maxTokens: action === "quiz" ? Math.max(4096, Math.min(12000, count * 220)) : 8192 }
       );
       usedModel = openRouterModel;
     }
-    if (!raw.trim()) throw new Error("The AI provider returned an empty response.");
+    if (!raw.trim()) throw new Error(lastGeminiError || "The AI provider returned an empty response.");
   } catch (error) {
     const { error: updateError } = await admin.from("ai_generations")
       .update({ status: "failed", error_code: "provider_error", updated_at: new Date().toISOString() })
@@ -322,10 +324,13 @@ export async function POST(request: Request) {
     console.error("AI study generation failed", {
       model,
       message: error instanceof Error ? error.message.slice(0, 400) : "Unknown AI error",
+      geminiError: lastGeminiError,
     });
     let detail = error instanceof Error ? error.message.slice(0, 300) : "Unknown AI error.";
     if (detail.includes("requires more credits") || detail.includes("openrouter.ai/settings/credits")) {
-      detail = "Your OpenRouter account has run out of credits. Please add credits at https://openrouter.ai/settings/credits, or configure a free Google Gemini API key in your environment variables (100% free at https://aistudio.google.com/app/apikey).";
+      detail = lastGeminiError
+        ? `Primary Gemini generation encountered an error (${lastGeminiError.slice(0, 150)}) and fallback OpenRouter account has no credits.`
+        : "Your OpenRouter account has run out of credits. Please add credits at https://openrouter.ai/settings/credits, or configure a free Google Gemini API key in your environment variables (100% free at https://aistudio.google.com/app/apikey).";
     }
     return badRequest(`The AI service could not complete this request. ${detail}`, 502);
   }

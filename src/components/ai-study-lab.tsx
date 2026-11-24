@@ -207,7 +207,7 @@ export function AiStudyLab({
 
     setGenerating(true);
     try {
-      const maxCount = action === "quiz" ? 100 : 20;
+      const maxCount = action === "quiz" ? 50 : 20;
       const parsed = Math.round(Number(countInput));
       const finalCount = Number.isFinite(parsed) && parsed >= 3 ? Math.min(maxCount, parsed) : 8;
 
@@ -346,12 +346,12 @@ export function AiStudyLab({
                 {(action === "quiz" || action === "flashcards") && (
                   <div>
                     <label className="text-[10px] font-extrabold text-[#5d5768]">
-                      {action === "quiz" ? "QUESTION COUNT (UP TO 100)" : "CARD COUNT"}
+                      {action === "quiz" ? "QUESTION COUNT (UP TO 50)" : "CARD COUNT"}
                       <input
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        placeholder={action === "quiz" ? "e.g. 25 (up to 100)" : "e.g. 10"}
+                        placeholder={action === "quiz" ? "e.g. 25 (up to 50)" : "e.g. 10"}
                         value={countInput}
                         onChange={(event) => {
                           const val = event.target.value.replace(/[^0-9]/g, "");
@@ -362,7 +362,7 @@ export function AiStudyLab({
                           }
                         }}
                         onBlur={() => {
-                          const max = action === "quiz" ? 100 : 20;
+                          const max = action === "quiz" ? 50 : 20;
                           if (!countInput || countInput.trim() === "") {
                             setCountInput("8");
                             setCount(8);
@@ -376,8 +376,8 @@ export function AiStudyLab({
                         className="mt-1.5 h-10 w-full rounded-xl border border-[#e7e3ec] px-3 text-xs font-semibold outline-none focus:border-[#aa9af0]"
                       />
                       <span className="mt-1 flex items-center justify-between text-[10px] font-medium text-[#7a7485]">
-                        <span>Limit: <strong>3</strong> – <strong>{action === "quiz" ? 100 : 20}</strong> {action === "quiz" ? "questions" : "cards"}</span>
-                        <span className="font-bold text-[#7259e8]">{action === "quiz" ? "Max: 100 questions" : "Max: 20"}</span>
+                        <span>Limit: <strong>3</strong> – <strong>{action === "quiz" ? 50 : 20}</strong> {action === "quiz" ? "questions" : "cards"}</span>
+                        <span className="font-bold text-[#7259e8]">{action === "quiz" ? "Max: 50 questions" : "Max: 20"}</span>
                       </span>
                     </label>
 
@@ -385,7 +385,7 @@ export function AiStudyLab({
                     {action === "quiz" && (
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <span className="text-[9px] font-bold text-[#8a8496]">Presets:</span>
-                        {[5, 10, 20, 30, 50, 75, 100].map((preset) => (
+                        {[5, 10, 15, 25, 50].map((preset) => (
                           <button
                             key={preset}
                             type="button"

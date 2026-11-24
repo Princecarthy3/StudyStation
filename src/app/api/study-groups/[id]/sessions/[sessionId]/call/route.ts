@@ -57,21 +57,16 @@ export async function GET(_request: Request, context: RouteContext) {
   const startsAt = Date.parse(data.starts_at);
   const graceMs = 15 * 60 * 1000; // 15 minutes after scheduled end
 
-  // Only hard-block completed sessions that ended long ago.
-  if (data.status === "completed" && Number.isFinite(endsAt) && now > endsAt + graceMs) {
+  // Completed or cancelled sessions cannot be rejoined.
+  if (data.status === "completed") {
     return fail("This study call has ended.", 410);
   }
   if (data.status === "cancelled") {
     return fail("This study call was cancelled.", 410);
   }
-  // If status flipped to completed too early, reopen while still within the live window.
-  if (data.status === "completed" && Number.isFinite(endsAt) && now <= endsAt + graceMs) {
-    await admin.from("study_sessions").update({ status: "scheduled" }).eq("id", sessionId).eq("group_id", id);
-  }
-  // Extend end if someone is still joining near the end of the window.
-  if (Number.isFinite(endsAt) && now > endsAt - 5 * 60 * 1000 && now <= endsAt + graceMs) {
-    const extended = new Date(now + 45 * 60 * 1000).toISOString();
-    await admin.from("study_sessions").update({ ends_at: extended, status: "scheduled" }).eq("id", sessionId).eq("group_id", id);
+  if (Number.isFinite(endsAt) && now > endsAt) {
+    await admin.from("study_sessions").update({ status: "completed" }).eq("id", sessionId).eq("group_id", id);
+    return fail("This study call has ended.", 410);
   }
   void startsAt;
 

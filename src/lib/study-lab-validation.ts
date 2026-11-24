@@ -82,7 +82,7 @@ export function validateStudyOutput(action: StudyLabAction, value: unknown): val
   return text(output.title, 300)
     && Array.isArray(output.questions)
     && output.questions.length >= 1
-    && output.questions.length <= 100
+    && output.questions.length <= 50
     && output.questions.every((question) => {
       if (!question || typeof question !== "object") return false;
       const item = question as Record<string, unknown>;
@@ -246,7 +246,7 @@ export function normalizeQuizOutput(value: unknown, requestedCount: number): Qui
       type,
     });
 
-    if (questions.length >= Math.min(100, Math.max(1, requestedCount || 100))) break;
+    if (questions.length >= Math.min(50, Math.max(1, requestedCount || 50))) break;
   }
 
   if (!questions.length) return null;

@@ -160,18 +160,11 @@ export async function geminiChat(
     });
   }
 
-  // thinkingConfig is only valid on models supporting reasoning (e.g. gemini-2.5+, gemini-3+)
-  const supportsThinking = model.startsWith("gemini-2.5") || model.startsWith("gemini-3");
   const generationConfig: Record<string, unknown> = {
     temperature: options?.temperature ?? 0.25,
     maxOutputTokens: options?.maxOutputTokens ?? 4096,
     ...(options?.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
   };
-  if (supportsThinking) {
-    generationConfig.thinkingConfig = {
-      thinkingLevel: model.includes("flash-lite") ? "minimal" : "low",
-    };
-  }
 
   const payload: Record<string, unknown> = {
     contents,

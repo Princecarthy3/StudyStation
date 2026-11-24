@@ -31,7 +31,7 @@ const sections: InfoSection[] = [
   {
     heading: "How are flashcards and quizzes created?",
     paragraphs: [
-      "AI Study Lab uses your lecture transcript and notes to generate summaries, explanations, flashcards, and practice quizzes. You choose difficulty and question count (up to 30 for quizzes). Always review generated material for accuracy before relying on it in exams.",
+      "AI Study Lab uses your lecture transcript and notes to generate summaries, explanations, flashcards, and practice quizzes. You choose difficulty and question count (up to 50 for quizzes). Always review generated material for accuracy before relying on it in exams.",
     ],
   },
   {

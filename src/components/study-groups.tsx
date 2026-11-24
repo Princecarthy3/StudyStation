@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -152,6 +152,39 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
     const timer = window.setInterval(() => setNowTime(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const endedSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!detail) return ids;
+    for (const m of detail.messages) {
+      const endMatch = m.body.match(/\[call-ended:([0-9a-f-]{36})\]/i);
+      if (endMatch) ids.add(endMatch[1]);
+    }
+    return ids;
+  }, [detail]);
+
+  const callEndTimestamps = useMemo(() => {
+    const times: number[] = [];
+    if (!detail) return times;
+    for (const m of detail.messages) {
+      if (m.body.includes("Group study call ended")) {
+        const t = Date.parse(m.created_at);
+        if (Number.isFinite(t)) times.push(t);
+      }
+    }
+    return times;
+  }, [detail]);
+
+  const isSessionCurrentlyActive = useCallback(
+    (sess: GroupSession) => {
+      if (sess.status !== "scheduled") return false;
+      if (endedSessionIds.has(sess.id)) return false;
+      const startsAt = Date.parse(sess.starts_at);
+      const endsAt = Date.parse(sess.ends_at);
+      return Number.isFinite(startsAt) && Number.isFinite(endsAt) && startsAt <= nowTime && nowTime < endsAt;
+    },
+    [endedSessionIds, nowTime]
+  );
   const [showGroupTools, setShowGroupTools] = useState(false);
   const [showShareResources, setShowShareResources] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -443,15 +476,8 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
   async function startGroupCall() {
     if (!selectedId) return;
     setError("");
-    const nowTime = Date.now();
     // If an active session is currently running right now, join it immediately
-    const existingActive = detail?.sessions.find((sess) => {
-      if (sess.status !== "scheduled" && sess.status !== "completed") return false;
-      const startsAt = Date.parse(sess.starts_at);
-      const endsAt = Date.parse(sess.ends_at);
-      // Live if started and within end + 15m grace (matches server).
-      return Number.isFinite(startsAt) && Number.isFinite(endsAt) && startsAt <= nowTime && nowTime < endsAt + 15 * 60 * 1000;
-    });
+    const existingActive = detail?.sessions.find(isSessionCurrentlyActive);
     if (existingActive) {
       setCallSession(existingActive);
       setNotice("");
@@ -598,23 +624,13 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
             <div className="px-4 pb-6 pt-3 sm:px-6">
             <div className="flex min-w-0 flex-col justify-between gap-3 border-b border-[#eeeaf2] pb-4 sm:flex-row sm:items-start"><div className="min-w-0"><p className="break-words text-[9px] font-bold capitalize text-[#7259e8]">{detail.group.visibility} group · <button type="button" onClick={() => setShowMembers(true)} className="underline underline-offset-2">{detail.memberCount ?? detail.members.length} members</button> {detail.role ? `· You are ${detail.role}` : ""}</p></div>
               <div className="flex flex-wrap gap-2">{detail.role ? <>{(() => {
-                const activeCall = detail.sessions.find((sess) => {
-                  if (sess.status !== "scheduled" && sess.status !== "completed") return false;
-                  const startsAt = Date.parse(sess.starts_at);
-                  const endsAt = Date.parse(sess.ends_at);
-                  return Number.isFinite(startsAt) && Number.isFinite(endsAt) && startsAt <= nowTime && nowTime < endsAt + 15 * 60 * 1000;
-                });
-                return <button type="button" onClick={() => void startGroupCall()} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[9px] font-extrabold text-white transition ${activeCall ? "bg-emerald-600 hover:bg-emerald-700 animate-pulse shadow-md shadow-emerald-500/25" : "bg-[#7259e8] hover:bg-[#6247df]"}`}><Phone className="size-3" /> {activeCall ? "Join Live Call" : "Call"}</button>;
+                const activeCall = detail.sessions.find(isSessionCurrentlyActive);
+                return <button type="button" onClick={() => (activeCall ? setCallSession(activeCall) : void startGroupCall())} className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[9px] font-extrabold text-white transition ${activeCall ? "bg-emerald-600 hover:bg-emerald-700 animate-pulse shadow-md shadow-emerald-500/25" : "bg-[#7259e8] hover:bg-[#6247df]"}`}><Phone className="size-3" /> {activeCall ? "Join Live Call" : "Call"}</button>;
               })()}{["owner", "moderator"].includes(detail.role) && <><button type="button" onClick={() => void groupAction("create_invite")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e8e3f0] px-2.5 text-[9px] font-extrabold"><Copy className="size-3" /> Invite</button><button type="button" onClick={() => {if (window.confirm("Revoke every active invitation to this group?")) void groupAction("revoke_invites");}} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e8e3f0] px-2.5 text-[9px] font-extrabold">Revoke invites</button></>}<button type="button" onClick={() => void reportMessage()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e8e3f0] px-2.5 text-[9px] font-extrabold"><ShieldAlert className="size-3" /> Report</button>{detail.role !== "owner" ? <button type="button" onClick={() => void groupAction("leave")} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#f0d7d4] px-2.5 text-[9px] font-extrabold text-[#a44e48]">Leave</button> : <button type="button" onClick={() => {if (window.confirm("Delete this group and all its discussions, sessions, and invitations? Shared resources will become private again.")) void groupAction("delete_group");}} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#f0d7d4] px-2.5 text-[9px] font-extrabold text-[#a44e48]">Delete group</button>}</> : detail.group.visibility === "public" ? <button type="button" onClick={() => void joinPublic({ ...detail.group, role: null })} className="h-8 rounded-lg bg-[#7259e8] px-3 text-[9px] font-extrabold text-white">Join group</button> : <span className="rounded-lg bg-[#f5f3f8] px-3 py-2 text-[9px] font-bold text-[#8a8494]">Invite required</span>}</div>
             </div>
 
             {(() => {
-              const activeCall = detail.sessions.find((s) => {
-                if (s.status !== "scheduled") return false;
-                const startsAt = Date.parse(s.starts_at);
-                const endsAt = Date.parse(s.ends_at);
-                return Number.isFinite(startsAt) && Number.isFinite(endsAt) && startsAt <= nowTime && endsAt > nowTime && (nowTime - startsAt) < 25 * 60 * 1000;
-              });
+              const activeCall = detail.sessions.find(isSessionCurrentlyActive);
               if (!activeCall) return null;
               return (
                 <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-50/90 p-3 shadow-sm">
@@ -628,9 +644,25 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
                       <p className="text-[9px] text-emerald-800/80">Group members are on a call right now.</p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => setCallSession(activeCall)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 text-[9px] font-extrabold text-white shadow transition hover:bg-emerald-700">
-                    <Phone className="size-3" /> Join Call
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onClick={() => setCallSession(activeCall)} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 text-[9px] font-extrabold text-white shadow transition hover:bg-emerald-700">
+                      <Phone className="size-3" /> Join Call
+                    </button>
+                    {["owner", "moderator"].includes(detail.role ?? "") && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (window.confirm("End this call for the group?")) {
+                            await groupAction("end_call", { sessionId: activeCall.id });
+                          }
+                        }}
+                        className="inline-flex h-7 shrink-0 items-center rounded-lg border border-red-200 bg-white px-2 text-[9px] font-bold text-red-600 shadow-sm transition hover:bg-red-50"
+                        title="End call for everyone"
+                      >
+                        End Call
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -647,19 +679,17 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
                   const matchingSession = targetSessionId
                     ? detail.sessions.find((s) => s.id === targetSessionId)
                     : null;
-                  const messageAgeMs = nowTime - Date.parse(item.created_at);
-                  const sessionEnds = matchingSession ? Date.parse(matchingSession.ends_at) : NaN;
-                  const sessionStarts = matchingSession ? Date.parse(matchingSession.starts_at) : NaN;
-                  // Prefer session window; if session row is missing from the list, treat recent cards as joinable.
-                  const isCallActive = matchingSession
-                    ? (
-                        (matchingSession.status === "scheduled" || matchingSession.status === "completed")
-                        && Number.isFinite(sessionStarts)
-                        && Number.isFinite(sessionEnds)
-                        && sessionStarts <= nowTime
-                        && nowTime < sessionEnds + 15 * 60 * 1000
-                      )
-                    : (Number.isFinite(messageAgeMs) && messageAgeMs >= 0 && messageAgeMs < 90 * 60 * 1000);
+                  const messageCreatedAt = Date.parse(item.created_at);
+
+                  const isExplicitlyEnded = Boolean(
+                    (targetSessionId && endedSessionIds.has(targetSessionId))
+                    || (matchingSession && (matchingSession.status === "completed" || matchingSession.status === "cancelled"))
+                    || callEndTimestamps.some((endT) => Number.isFinite(messageCreatedAt) && endT >= messageCreatedAt)
+                  );
+
+                  const isCallActive = !isExplicitlyEnded && Boolean(
+                    matchingSession && isSessionCurrentlyActive(matchingSession)
+                  );
 
                   return (
                     <article key={item.id} className={`max-w-[92%] rounded-xl p-3 ${item.isMine ? "ml-auto bg-[#f1efff]" : "bg-[#f7f6f9]"}`}>
@@ -677,10 +707,14 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
                         </div>
                       )}
                       {isCallAnnouncement ? (
-                        <div className="mt-2 overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-white p-3 shadow-sm">
+                        <div className={`mt-2 overflow-hidden rounded-xl border p-3 shadow-sm ${
+                          isCallActive
+                            ? "border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-white"
+                            : "border-[#e7e3ed] bg-[#f8f7fa]"
+                        }`}>
                           <div className="flex items-center gap-3">
                             <div className={`grid size-10 shrink-0 place-items-center rounded-xl text-white shadow-md ${
-                              isCallActive ? "bg-emerald-600 animate-pulse shadow-emerald-600/30" : "bg-[#716982]"
+                              isCallActive ? "bg-emerald-600 animate-pulse shadow-emerald-600/30" : "bg-[#8b8596]"
                             }`}>
                               <Phone className="size-4" />
                             </div>
@@ -697,25 +731,10 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
                                   : "This call has ended"}
                               </p>
                             </div>
-                            {isCallActive && (
+                            {isCallActive && matchingSession && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (matchingSession) {
-                                    setCallSession(matchingSession);
-                                  } else if (targetSessionId) {
-                                    setCallSession({
-                                      id: targetSessionId,
-                                      title: "Study Group Call",
-                                      starts_at: item.created_at,
-                                      ends_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-                                      status: "scheduled",
-                                      notes: null,
-                                    });
-                                  } else {
-                                    void startGroupCall();
-                                  }
-                                }}
+                                onClick={() => setCallSession(matchingSession)}
                                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 text-[9px] font-extrabold text-white shadow-md shadow-emerald-600/25 transition hover:bg-emerald-700"
                               >
                                 <Phone className="size-3" /> Join Call
@@ -750,10 +769,19 @@ export function StudyGroups({ courses, inviteToken, initialGroupId, callSessionI
     </div>
     {showGroupInfo && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowGroupInfo(false);}}><section role="dialog" aria-modal="true" aria-labelledby="group-info-title" className="w-full max-w-lg overflow-hidden rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><div><p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">GROUP INFO</p><h2 id="group-info-title" className="mt-1 text-base font-extrabold">{detail.group.name}</h2></div><button type="button" onClick={() => setShowGroupInfo(false)} aria-label="Close group information" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><div className="space-y-4 p-5"><div><p className="text-[9px] font-extrabold uppercase tracking-wide text-[#8a8494]">DESCRIPTION</p><p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#4e4859]">{detail.group.description || "No group description has been added."}</p></div><div className="flex items-center justify-between rounded-xl bg-[#f7f5ff] p-3"><span><b className="block text-xs">{detail.memberCount ?? detail.members.length} members</b><span className="text-[9px] capitalize text-[#8a8494]">{detail.group.visibility} group</span></span><button type="button" onClick={() => {setShowGroupInfo(false); setShowMembers(true);}} className="text-[10px] font-extrabold text-[#7259e8]">View members</button></div></div></section></div>}
     {showReport && detail && <div className="fixed inset-0 z-[120] grid place-items-center bg-[#17132d]/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowReport(false);}}><section role="dialog" aria-modal="true" aria-labelledby="report-group-title" className="w-full max-w-lg overflow-hidden rounded-[26px] border border-white/60 bg-white shadow-[0_24px_80px_rgba(23,19,45,.28)]"><header className="flex items-start justify-between gap-4 bg-gradient-to-br from-[#f5f2ff] to-white px-5 py-5 sm:px-6"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-[#7259e8] shadow-sm"><Mail className="size-5" /></span><div><p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">CONTACT STUDYSTATION</p><h2 id="report-group-title" className="mt-1 text-base font-extrabold text-[#17132d]">Report a concern</h2><p className="mt-1 text-[10px] leading-4 text-[#817a8d]">Our administration team will review this report and take appropriate actions.</p></div></div><button type="button" onClick={() => setShowReport(false)} aria-label="Close report form" className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-[#777080]"><X className="size-4" /></button></header><div className="space-y-4 px-5 py-5 sm:px-6"><div className="rounded-xl border border-[#eeeaf5] bg-[#fbfaff] p-3"><p className="text-[9px] font-bold uppercase tracking-wide text-[#918b9a]">Sending to Admin</p><a href="mailto:studystation.support@gmail.com" className="mt-1 block break-all text-xs font-extrabold text-[#5d47bd]">studystation.support@gmail.com</a></div><label className="block text-[10px] font-extrabold text-[#5d5768]">WHAT HAPPENED?<textarea value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} maxLength={3000} rows={5} placeholder="Tell us what happened and what you were doing…" className="mt-1.5 w-full resize-y rounded-xl border border-[#e7e3ec] p-3 text-xs font-medium leading-5 outline-none focus:border-[#aa9af0]" /></label><p className="text-[9px] leading-4 text-[#8a8494]">Group: {detail.group.name}{reportMessageId ? " · Message report" : ""}</p><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setShowReport(false)} className="h-10 rounded-xl border border-[#e7e3ec] px-4 text-[10px] font-extrabold text-[#655d74]">Cancel</button><a href={reportMailto} onClick={submitReportConcern} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#7259e8] px-4 text-[10px] font-extrabold text-white cursor-pointer"><Mail className="size-3.5" /> Submit report</a></div></div></section></div>}
-    {showSession && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowSession(false);}}><section role="dialog" aria-modal="true" aria-labelledby="schedule-session-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><h2 id="schedule-session-title" className="text-sm font-extrabold">Study sessions</h2><button type="button" onClick={() => setShowSession(false)} aria-label="Close sessions" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><div className="space-y-4 p-5">{["owner", "moderator"].includes(detail.role ?? "") && <form onSubmit={createSession} className="space-y-2"><input required name="title" minLength={2} maxLength={160} placeholder="Session title" className="h-10 w-full rounded-lg border border-[#e8e4ed] px-3 text-xs" /><label className="block text-[9px] font-bold text-[#8a8494]">START<input required name="startsAt" type="datetime-local" className="mt-1 h-10 w-full rounded-lg border border-[#e8e4ed] px-3 text-xs" /></label><label className="block text-[9px] font-bold text-[#8a8494]">END<input required name="endsAt" type="datetime-local" className="mt-1 h-10 w-full rounded-lg border border-[#e8e4ed] px-3 text-xs" /></label><textarea name="notes" maxLength={2000} rows={2} placeholder="Agenda (optional)" className="w-full rounded-lg border border-[#e8e4ed] p-3 text-xs" /><button className="h-10 w-full rounded-lg bg-[#17132d] text-xs font-extrabold text-white">Schedule session</button></form>}<div className="space-y-2">{detail.sessions.filter((session) => session.status === "scheduled" && session.title !== "Instant group call" && session.title !== "Study Group Call").map((session) => {const startsAt = Date.parse(session.starts_at); const endsAt = Date.parse(session.ends_at); const isOngoing = Number.isFinite(startsAt) && Number.isFinite(endsAt) && callClock >= startsAt && callClock < endsAt + 15 * 60 * 1000; const isUpcoming = Number.isFinite(startsAt) && Number.isFinite(endsAt) && callClock >= startsAt - 15 * 60 * 1000 && callClock < endsAt; return <div key={session.id} className="rounded-xl bg-[#f7f5ff] p-3"><b className="block break-words text-xs">{session.title}</b><p className="mt-1 text-[10px] text-[#726b80]">{formatDate(session.starts_at)} – {formatDate(session.ends_at)}</p>{session.notes && <p className="mt-1 text-[10px] leading-4 text-[#898391]">{session.notes}</p>}{detail.callEnabled && isOngoing && <button type="button" onClick={() => setCallSession(session)} className="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-extrabold text-white">Join call</button>}{detail.callEnabled && !isOngoing && isUpcoming && <button type="button" onClick={() => void startGroupCall()} className="mt-2 rounded-lg bg-[#7259e8] px-3 py-2 text-[9px] font-extrabold text-white">Start call</button>}{["owner", "moderator"].includes(detail.role ?? "") && <button type="button" onClick={() => void groupAction("cancel_session", { text: session.id })} className="mt-2 block text-[9px] font-bold text-[#a44e48]">Cancel session</button>}</div>;})}{detail.sessions.every((session) => session.status !== "scheduled" || session.title === "Instant group call" || session.title === "Study Group Call") && <p className="py-3 text-center text-[10px] text-[#8a8494]">No upcoming sessions scheduled.</p>}</div></div></section></div>}
+    {showSession && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowSession(false);}}><section role="dialog" aria-modal="true" aria-labelledby="schedule-session-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><h2 id="schedule-session-title" className="text-sm font-extrabold">Study sessions</h2><button type="button" onClick={() => setShowSession(false)} aria-label="Close sessions" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><div className="space-y-4 p-5">{["owner", "moderator"].includes(detail.role ?? "") && <form onSubmit={createSession} className="space-y-2"><input required name="title" minLength={2} maxLength={160} placeholder="Session title" className="h-10 w-full rounded-lg border border-[#e8e4ed] px-3 text-xs" /><label className="block text-[9px] font-bold text-[#8a8494]">START<input required name="startsAt" type="datetime-local" className="mt-1 h-10 w-full rounded-lg border border-[#e8e4ed] px-3 text-xs" /></label><label className="block text-[9px] font-bold text-[#8a8494]">END<input required name="endsAt" type="datetime-local" className="mt-1 h-10 w-full rounded-lg border border-[#e8e4ed] px-3 text-xs" /></label><textarea name="notes" maxLength={2000} rows={2} placeholder="Agenda (optional)" className="w-full rounded-lg border border-[#e8e4ed] p-3 text-xs" /><button className="h-10 w-full rounded-lg bg-[#17132d] text-xs font-extrabold text-white">Schedule session</button></form>}<div className="space-y-2">{detail.sessions.filter((session) => session.status === "scheduled" && session.title !== "Instant group call" && session.title !== "Study Group Call").map((session) => {const startsAt = Date.parse(session.starts_at); const endsAt = Date.parse(session.ends_at); const isOngoing = Number.isFinite(startsAt) && Number.isFinite(endsAt) && callClock >= startsAt && callClock < endsAt; const isUpcoming = Number.isFinite(startsAt) && Number.isFinite(endsAt) && callClock >= startsAt - 15 * 60 * 1000 && callClock < startsAt; return <div key={session.id} className="rounded-xl bg-[#f7f5ff] p-3"><b className="block break-words text-xs">{session.title}</b><p className="mt-1 text-[10px] text-[#726b80]">{formatDate(session.starts_at)} – {formatDate(session.ends_at)}</p>{session.notes && <p className="mt-1 text-[10px] leading-4 text-[#898391]">{session.notes}</p>}{detail.callEnabled && isOngoing && <button type="button" onClick={() => setCallSession(session)} className="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-extrabold text-white">Join call</button>}{detail.callEnabled && !isOngoing && isUpcoming && <button type="button" onClick={() => void startGroupCall()} className="mt-2 rounded-lg bg-[#7259e8] px-3 py-2 text-[9px] font-extrabold text-white">Start call</button>}{["owner", "moderator"].includes(detail.role ?? "") && <button type="button" onClick={() => void groupAction("cancel_session", { text: session.id })} className="mt-2 block text-[9px] font-bold text-[#a44e48]">Cancel session</button>}</div>;})}{detail.sessions.every((session) => session.status !== "scheduled" || session.title === "Instant group call" || session.title === "Study Group Call") && <p className="py-3 text-center text-[10px] text-[#8a8494]">No upcoming sessions scheduled.</p>}</div></div></section></div>}
     {showShareResources && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowShareResources(false);}}><section role="dialog" aria-modal="true" aria-labelledby="share-resources-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><h2 id="share-resources-title" className="text-sm font-extrabold">Share resources</h2><button type="button" onClick={() => setShowShareResources(false)} aria-label="Close shared resources" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><div className="space-y-4 p-5">{detail.ownResources?.length ? <div className="flex gap-2"><select value={resourceToShare} onChange={(event) => setResourceToShare(event.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-[#e8e4ed] bg-white px-2 text-[10px]"><option value="">Choose a saved resource or note</option>{detail.ownResources.map((resource) => <option key={resource.id} value={resource.id}>{resource.title} · {resource.resource_type}</option>)}</select><button type="button" disabled={!resourceToShare} onClick={async () => {const isNote = resourceToShare.startsWith("note:"); const result = await groupAction(isNote ? "share_note" : "share_resource", { resourceId: isNote ? resourceToShare.slice(5) : resourceToShare }); if (result) {setResourceToShare(""); setShowShareResources(false);}}} className="h-10 rounded-lg bg-[#7259e8] px-4 text-[10px] font-extrabold text-white disabled:opacity-50">Share</button></div> : <p className="rounded-xl bg-[#f7f5ff] p-3 text-[10px] leading-4 text-[#8a8494]">Your saved resources and generated notes will appear here when available.</p>}<div className="space-y-2">{detail.resources.map((resource) => <div key={resource.id} className="flex items-center justify-between gap-2 rounded-lg bg-[#f7f6f9] px-3 py-2"><span className="min-w-0"><b className="block truncate text-[10px]">{resource.title}</b><span className="text-[8px] text-[#938d9b]">{resource.resourceType}</span></span><span className="flex shrink-0 items-center gap-3"><button type="button" onClick={() => {setShowShareResources(false); void openResource(resource);}} className="text-[9px] font-bold text-[#5d47bd]">Open</button>{resource.isMine && <button type="button" onClick={async () => {const result = await groupAction("unshare_resource", { resourceId: resource.id }); if (result) setShowShareResources(false);}} className="text-[9px] font-bold text-[#a44e48]">Unshare</button>}</span></div>)}{!detail.resources.length && <p className="text-[10px] text-[#8a8494]">No resources have been shared yet.</p>}</div></div></section></div>}
     {showMembers && detail && <div className="fixed inset-0 z-[110] grid place-items-center bg-[#17132d]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => {if (event.target === event.currentTarget) setShowMembers(false);}}><section role="dialog" aria-modal="true" aria-labelledby="group-members-title" className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-[24px] bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-[#eeeaf2] px-5 py-4"><div><p className="text-[9px] font-black uppercase tracking-[.14em] text-[#7259e8]">{detail.group.name}</p><h2 id="group-members-title" className="mt-1 text-base font-extrabold">{detail.memberCount ?? detail.members.length} members</h2></div><button type="button" onClick={() => setShowMembers(false)} aria-label="Close members" className="grid size-9 place-items-center rounded-xl bg-[#f4f2f7]"><X className="size-4" /></button></header><ul className="max-h-[65vh] divide-y divide-[#f0edf4] overflow-y-auto px-5">{detail.members.map((member) => <li key={member.userId} className="flex items-center gap-3 py-3"><span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eeeaff] text-xs font-black text-[#7259e8]">{member.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><span className="min-w-0 flex-1"><b className="block truncate text-xs">{member.isSelf ? `${member.name} (You)` : member.name}</b><span className="mt-0.5 block text-[9px] capitalize text-[#8a8494]">{member.role} · Joined {formatDate(member.joinedAt)}</span></span>{detail.role === "owner" && !member.isSelf && member.role !== "owner" ? <span className="flex items-center gap-2"><select aria-label={`Role for ${member.name}`} value={member.role} onChange={(event) => void groupAction("set_member_role", { targetUserId: member.userId, newRole: event.target.value })} className="h-8 rounded-lg border border-[#e8e4ed] bg-white px-2 text-[9px] capitalize"><option value="member">Member</option><option value="moderator">Moderator</option></select><button type="button" onClick={() => {if (window.confirm(`Remove ${member.name} from this group?`)) void groupAction("remove_member", { targetUserId: member.userId });}} className="text-[9px] font-bold text-[#a44e48]">Remove</button></span> : <span className="rounded-full bg-[#f4f2f7] px-2.5 py-1 text-[8px] font-bold capitalize text-[#716a7c]">{member.role}</span>}</li>)}</ul><footer className="border-t border-[#eeeaf2] px-5 py-3 text-[9px] text-[#8a8494]">Only current group members can view this list.</footer></section></div>}
-    {callSession && selectedId && <StudyCallDialog groupId={selectedId} session={callSession} onClose={() => setCallSession(null)} />}
+    {callSession && selectedId && (
+      <StudyCallDialog
+        groupId={selectedId}
+        session={callSession}
+        onClose={() => {
+          setCallSession(null);
+          if (selectedId) void loadDetail(selectedId);
+        }}
+      />
+    )}
     {resourcePreview && (
       <div className="fixed inset-0 z-[120] grid place-items-center bg-[#17132d]/55 p-3 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="shared-resource-title">
         <section className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[22px] bg-white shadow-2xl">

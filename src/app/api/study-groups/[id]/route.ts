@@ -443,7 +443,7 @@ export async function POST(request: Request, context: RouteContext) {
         await admin.from("group_messages").insert({
           group_id: id,
           sender_id: auth.user.id,
-          body: `📞 Group study call ended.`,
+          body: `📞 Group study call ended. [call-ended:${sessionId}]`,
         });
       } catch (msgErr) {
         console.warn("Could not post call end message:", msgErr);
