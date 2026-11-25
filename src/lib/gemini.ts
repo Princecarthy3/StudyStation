@@ -42,13 +42,17 @@ export function getGeminiStudyModel(): string {
     return "gemini-2.5-flash";
   }
 
+  if (envModel.includes("gemini-2.5-pro")) {
+    return "gemini-3.1-pro-preview";
+  }
+
   return envModel;
 }
 
 const FALLBACK_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
-  "gemini-2.5-pro",
+  "gemini-3.1-pro-preview",
 ];
 
 function isHighDemandOrTemporaryError(status: number, message: string): boolean {
@@ -112,6 +116,8 @@ export async function geminiChat(
     model.includes("gemini-2.0")
   ) {
     model = "gemini-2.5-flash";
+  } else if (model.includes("gemini-2.5-pro")) {
+    model = "gemini-3.1-pro-preview";
   }
 
   const triedModels = new Set(options?.triedModels ?? []);

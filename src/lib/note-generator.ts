@@ -1,5 +1,6 @@
 import { hasOpenRouterKey, openRouterChat } from "@/lib/openrouter";
 import { hasGeminiKey, geminiGenerateJson } from "@/lib/gemini";
+import { deepSeekChat, hasDeepSeekKey } from "@/lib/deepseek";
 import { parseJsonObjectSafe } from "@/lib/safe-json";
 
 export type OrganizedKeyTerm = {
@@ -378,7 +379,26 @@ Produce rich, university-grade study notes. Section headings must reflect what i
     }
   }
 
+  // 3. DeepSeek is the final hosted provider before the local organizer.
+  if (hasDeepSeekKey()) {
+    try {
+      const raw = await deepSeekChat(
+        [
+          { role: "system", content: systemInstructions },
+          { role: "user", content: userPrompt },
+        ],
+        { temperature: 0.2, maxTokens: 8192 },
+      );
+      const parsed = parseJsonObjectSafe<OrganizedNoteContent>(raw);
+      if (looksLikeGoodNotes(parsed)) {
+        return sanitizeNoteContent(parsed, title);
+      }
+    } catch (err) {
+      console.warn("[NoteGenerator] DeepSeek note generation failed:", err);
+    }
+  }
+
   console.warn("[NoteGenerator] Falling back to intelligent structured organizer");
-  // 3. Fallback to intelligent structured organizer (cleaned of all page/slide markers)
+  // 4. Fallback to intelligent structured organizer (cleaned of all page/slide markers)
   return sanitizeNoteContent(generateStructuredFallback(cleanedFull, title, courseTitle), title);
 }

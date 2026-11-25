@@ -117,16 +117,16 @@ After applying the required migrations to a development project and signing in:
 
 ## AI Study Lab
 
-Stage 8 adds the AI Study Lab to the workspace navigation. It can create revision summaries, concept explanations, source-grounded answers, simplified explanations, flashcards, and multiple-choice practice quizzes from a completed lecture transcript owned by the signed-in student. The transcript is supplied as retrieved context, while Gemini can use its subject reasoning to clarify and connect ideas without contradicting the source. The generated output is stored in `ai_generations`, can be edited or deleted, and is restricted to 20 requests per user per hour. Each request uses at most 8,000 transcript characters; unrelated account data is not sent to the AI provider. Structured output is validated before it is saved. Configure the server-only `GEMINI_API_KEY` from Google AI Studio and, optionally, `GEMINI_STUDY_MODEL` (defaults to `gemini-2.5-flash` with minimal thinking).
+Stage 8 adds the AI Study Lab to the workspace navigation. It can create revision summaries, concept explanations, source-grounded answers, simplified explanations, flashcards, and multiple-choice practice quizzes from a completed lecture transcript owned by the signed-in student. The transcript is supplied as retrieved context, while the AI can use its subject reasoning to clarify and connect ideas without contradicting the source. The generated output is stored in `ai_generations`, can be edited or deleted, and is restricted to 20 requests per user per hour. Each request uses at most 8,000 transcript characters; unrelated account data is not sent to the AI provider. Structured output is validated before it is saved. Configure server-only provider keys; Gemini is tried first, then OpenRouter, then DeepSeek (`DEEPSEEK_API_KEY`, with optional `DEEPSEEK_MODEL`, defaulting to `deepseek-chat`).
 
 ### Manual AI Study Lab check
 
-After applying the Stage 4 and Stage 7 migrations and configuring Gemini:
+After applying the Stage 4 and Stage 7 migrations and configuring at least one AI provider:
 
 1. Complete a lecture transcription, then generate each study task from that lecture. Confirm the output is grounded in its transcript and appears in Recent generations after refresh.
 2. Edit a generated result and save it; delete another result. Confirm both changes persist.
 3. Try a lecture ID from another account, a lecture without a completed transcript, malformed request values, and a request beyond the per-hour limit. Confirm no unauthorized source is processed and each invalid request gets a clear response.
-4. Temporarily remove `GEMINI_API_KEY` and confirm the interface reports missing configuration rather than producing demo content.
+4. Configure `DEEPSEEK_API_KEY`, then temporarily disable or invalidate the Gemini and OpenRouter keys. Confirm Study Lab and organized notes still generate through DeepSeek. With all provider keys unavailable, confirm Study Lab reports missing configuration; note generation retains its existing structured local fallback.
 5. Check generated summaries and answer explanations against the lecture material; AI output can be incorrect and must not be treated as guaranteed fact.
 
 ## Study Groups
@@ -215,7 +215,7 @@ After applying the Stage 4, 5, and 7 migrations, configuring Supabase, and setti
 
 ## Environment variables
 
-`.env.example` contains placeholders only. Keep server-only credentials out of browser code. Configure only the providers required by the feature stage you are working on; Lecture Studio requires `SUPABASE_SERVICE_ROLE_KEY` for server-side lecture mutations and `OPENROUTER_API_KEY` for transcription. The AI Study Lab uses `GEMINI_API_KEY` and the service-role key for authenticated result persistence. Study Calls use the server-side `JITSI_MEET_DOMAIN` setting; do not add a provider secret to client-side variables.
+`.env.example` contains placeholders only. Keep server-only credentials out of browser code. Configure only the providers required by the feature stage you are working on; Lecture Studio requires `SUPABASE_SERVICE_ROLE_KEY` for server-side lecture mutations and `OPENROUTER_API_KEY` for transcription. Notes generation and AI Study Lab try `GEMINI_API_KEY`, then `OPENROUTER_API_KEY`, then `DEEPSEEK_API_KEY`; the Study Lab also requires the service-role key for authenticated result persistence. Study Calls use the server-side `JITSI_MEET_DOMAIN` setting; do not add a provider secret to client-side variables.
 
 ## Google Search & Ownership Verification
 

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getGeminiStudyModel, geminiGenerateJson, hasGeminiKey } from "@/lib/gemini";
 import { parseJsonObject } from "@/lib/openrouter";
 import { hasOpenRouterKey, openRouterChat } from "@/lib/openrouter";
+import { deepSeekChat, hasDeepSeekKey } from "@/lib/deepseek";
 import { normalizeQuizOutput, validateStudyOutput, type StudyLabAction, type StudyLabOutput } from "@/lib/study-lab-validation";
 
 export const runtime = "nodejs";
@@ -207,8 +208,8 @@ export async function POST(request: Request) {
   if ((action === "ask" || action === "explain" || action === "simplify") && (question.length < 2 || question.length > 2000)) {
     return badRequest("Enter a concept or question between 2 and 2,000 characters.");
   }
-  if (!hasGeminiKey() && !hasOpenRouterKey()) {
-    return badRequest("No AI provider is configured. Add GEMINI_API_KEY or OPENROUTER_API_KEY to the server environment.", 503);
+  if (!hasGeminiKey() && !hasOpenRouterKey() && !hasDeepSeekKey()) {
+    return badRequest("No AI provider is configured. Add GEMINI_API_KEY, OPENROUTER_API_KEY, or DEEPSEEK_API_KEY to the server environment.", 503);
   }
 
   let admin;
@@ -272,6 +273,8 @@ export async function POST(request: Request) {
   let raw: string = "";
   let usedModel: string = model;
   let lastGeminiError: string | null = null;
+  let lastOpenRouterError: string | null = null;
+  let lastDeepSeekError: string | null = null;
   try {
     if (hasGeminiKey()) {
       try {
@@ -293,28 +296,56 @@ export async function POST(request: Request) {
         usedModel = generated.model;
       } catch (geminiError) {
         lastGeminiError = geminiError instanceof Error ? geminiError.message : String(geminiError);
-        if (!hasOpenRouterKey()) throw geminiError;
         console.warn("Gemini study generation failed; trying OpenRouter", lastGeminiError);
       }
     }
     if (!raw && hasOpenRouterKey()) {
       const openRouterModel = process.env.OPENROUTER_STUDY_MODEL ?? process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash";
-      raw = await openRouterChat(
-        [
-          { role: "system", content: "You are StudyStation, an expert university study tutor. Ground every answer in the supplied source and return only valid JSON." },
-          { role: "user", content: createPrompt(action, lecture.title, sourceText, {
-            instructions,
-            difficulty,
-            questionType,
-            count: Number.isInteger(count) ? count as number : 8,
-            question,
-          }) },
-        ],
-        { model: openRouterModel, temperature: 0.2, maxTokens: action === "quiz" ? Math.max(4096, Math.min(12000, count * 220)) : 8192 }
-      );
-      usedModel = openRouterModel;
+      try {
+        raw = await openRouterChat(
+          [
+            { role: "system", content: "You are StudyStation, an expert university study tutor. Ground every answer in the supplied source and return only valid JSON." },
+            { role: "user", content: createPrompt(action, lecture.title, sourceText, {
+              instructions,
+              difficulty,
+              questionType,
+              count: Number.isInteger(count) ? count as number : 8,
+              question,
+            }) },
+          ],
+          { model: openRouterModel, temperature: 0.2, maxTokens: action === "quiz" ? Math.max(4096, Math.min(12000, count * 220)) : 8192 }
+        );
+        usedModel = openRouterModel;
+      } catch (openRouterError) {
+        lastOpenRouterError = openRouterError instanceof Error ? openRouterError.message : String(openRouterError);
+        console.warn("OpenRouter study generation failed; trying DeepSeek", lastOpenRouterError);
+      }
     }
-    if (!raw.trim()) throw new Error(lastGeminiError || "The AI provider returned an empty response.");
+    if (!raw && hasDeepSeekKey()) {
+      const deepSeekModel = process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat";
+      try {
+        raw = await deepSeekChat(
+          [
+            { role: "system", content: "You are StudyStation, an expert university study tutor. Ground every answer in the supplied source and return only valid JSON." },
+            { role: "user", content: createPrompt(action, lecture.title, sourceText, {
+              instructions,
+              difficulty,
+              questionType,
+              count: Number.isInteger(count) ? count as number : 8,
+              question,
+            }) },
+          ],
+          { model: deepSeekModel, temperature: 0.2, maxTokens: action === "quiz" ? Math.max(4096, Math.min(12000, count * 220)) : 8192 }
+        );
+        usedModel = deepSeekModel;
+      } catch (deepSeekError) {
+        lastDeepSeekError = deepSeekError instanceof Error ? deepSeekError.message : String(deepSeekError);
+        console.warn("DeepSeek study generation failed", lastDeepSeekError);
+      }
+    }
+    if (!raw.trim()) {
+      throw new Error(lastDeepSeekError || lastOpenRouterError || lastGeminiError || "The AI provider returned an empty response.");
+    }
   } catch (error) {
     const { error: updateError } = await admin.from("ai_generations")
       .update({ status: "failed", error_code: "provider_error", updated_at: new Date().toISOString() })
@@ -325,9 +356,18 @@ export async function POST(request: Request) {
       model,
       message: error instanceof Error ? error.message.slice(0, 400) : "Unknown AI error",
       geminiError: lastGeminiError,
+      openRouterError: lastOpenRouterError,
+      deepSeekError: lastDeepSeekError,
     });
     let detail = error instanceof Error ? error.message.slice(0, 300) : "Unknown AI error.";
-    if (detail.includes("requires more credits") || detail.includes("openrouter.ai/settings/credits")) {
+    const failures = [
+      lastGeminiError ? `Gemini: ${lastGeminiError}` : null,
+      lastOpenRouterError ? `OpenRouter: ${lastOpenRouterError}` : null,
+      lastDeepSeekError ? `DeepSeek: ${lastDeepSeekError}` : null,
+    ].filter(Boolean);
+    if (lastDeepSeekError || failures.length > 1) {
+      detail = `All configured AI providers failed. ${failures.join(" | ")}`.slice(0, 600);
+    } else if (detail.includes("requires more credits") || detail.includes("openrouter.ai/settings/credits")) {
       if (lastGeminiError?.toLowerCase().includes("high demand") || lastGeminiError?.toLowerCase().includes("spikes in demand")) {
         detail = "Google Gemini is currently experiencing a temporary high-demand spike. Please wait a few moments and try again. You do not need to buy OpenRouter credits.";
       } else {
@@ -352,18 +392,48 @@ export async function POST(request: Request) {
   if (!validateStudyOutput(action, output) && action === "quiz") {
     try {
       const repairCount = count;
-      const repaired = await geminiGenerateJson([
+      const repairPrompt = [
         "Return only valid JSON for a practice quiz. No markdown.",
         `Create exactly ${repairCount} practice questions in format "${questionType}" at ${difficulty} difficulty from this source.`,
         'Schema: {"title":"...","questions":[{"question":"...","type":"multiple_choice","choices":["...","..."],"correctIndex":0,"explanation":"..."}]}',
         `SOURCE TITLE: ${lecture.title}`,
         `SOURCE MATERIAL:\n${sourceText.slice(0, 15000)}`,
-      ].join("\n\n"), {
-        model,
-        temperature: 0.2,
-        maxOutputTokens: action === "quiz" ? Math.max(8192, Math.min(48000, count * 350)) : 8192,
-      });
-      const repairedRaw = parseJsonObject<unknown>(repaired.text);
+      ].join("\n\n");
+      let repairedText: string | null = null;
+      if (hasGeminiKey()) {
+        try {
+          const repaired = await geminiGenerateJson(repairPrompt, {
+            model,
+            temperature: 0.2,
+            maxOutputTokens: Math.max(8192, Math.min(48000, count * 350)),
+          });
+          repairedText = repaired.text;
+        } catch (repairError) {
+          console.warn("Gemini quiz repair failed; trying the next provider", repairError instanceof Error ? repairError.message : repairError);
+        }
+      }
+      if (!repairedText && hasOpenRouterKey()) {
+        try {
+          repairedText = await openRouterChat([
+            { role: "system", content: "Return only valid JSON for a practice quiz. No markdown." },
+            { role: "user", content: repairPrompt },
+          ], { model: process.env.OPENROUTER_STUDY_MODEL ?? process.env.OPENROUTER_MODEL, temperature: 0.2, maxTokens: Math.min(12000, count * 220) });
+        } catch (repairError) {
+          console.warn("OpenRouter quiz repair failed; trying DeepSeek", repairError instanceof Error ? repairError.message : repairError);
+        }
+      }
+      if (!repairedText && hasDeepSeekKey()) {
+        try {
+          repairedText = await deepSeekChat([
+            { role: "system", content: "Return only valid JSON for a practice quiz. No markdown." },
+            { role: "user", content: repairPrompt },
+          ], { temperature: 0.2, maxTokens: Math.min(8192, count * 220) });
+        } catch (repairError) {
+          console.warn("DeepSeek quiz repair failed", repairError instanceof Error ? repairError.message : repairError);
+        }
+      }
+      if (!repairedText) throw new Error("All configured providers failed to repair the quiz output.");
+      const repairedRaw = parseJsonObject<unknown>(repairedText);
       const normalized = normalizeQuizOutput(repairedRaw, repairCount);
       if (normalized) output = normalized;
     } catch (repairError) {
